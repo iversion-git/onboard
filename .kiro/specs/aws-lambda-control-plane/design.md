@@ -2,9 +2,9 @@
 
 ## Overview
 
-The AWS Lambda Control Plane API is designed as a serverless microservices architecture running on AWS Lambda with Node.js 24. The system follows a "one Lambda per route" pattern with shared utility layers to ensure consistency, security, and maintainability. The architecture emphasizes small, focused functions with centralized authentication and authorization through an API Gateway Lambda Authorizer.
+The AWS Lambda Control Plane API is designed as a serverless microservices architecture running on AWS Lambda with Node.js 20. The system follows a "one Lambda per route" pattern with bundled dependencies using esbuild to ensure optimal performance, simplified deployment, and consistent behavior. The architecture emphasizes small, focused functions with centralized authentication and authorization through an API Gateway Lambda Authorizer.
 
-The system serves as a control plane for ERP provisioning workflows, providing secure staff authentication, comprehensive role-based access control, and controlled tenant registration capabilities. All functions share common patterns for logging, tracing, error handling, and data validation through Lambda Layers.
+The system serves as a control plane for ERP provisioning workflows, providing secure staff authentication, comprehensive role-based access control, and controlled tenant registration capabilities. All functions use a shared lib/ directory structure with bundled dependencies for consistent patterns while maintaining deployment independence.
 
 ## Architecture
 
@@ -25,34 +25,40 @@ graph TB
     AuthLambda --> SES[Amazon SES]
     AuthLambda --> SM[Secrets Manager]
     
-    AuthLambda -.-> CoreLayer[Shared Core Layer]
-    StaffLambda -.-> CoreLayer
-    TenantLambda -.-> CoreLayer
+    AuthLambda -.-> LibUtils[lib/ utilities - bundled]
+    StaffLambda -.-> LibUtils
+    TenantLambda -.-> LibUtils
     
-    AuthLambda -.-> DepsLayer[Dependencies Layer]
-    StaffLambda -.-> DepsLayer
-    TenantLambda -.-> DepsLayer
+    AuthLambda -.-> BundledDeps[Dependencies - bundled with esbuild]
+    StaffLambda -.-> BundledDeps
+    TenantLambda -.-> BundledDeps
 ```
 
-### Lambda Layer Strategy
+### Bundled Dependencies Strategy
 
-**Dependencies Layer (Layer 1)**
-- AWS Lambda Powertools for TypeScript (logging, tracing, metrics)
-- `jose` library for JWT operations
-- `zod` for runtime validation
-- `bcrypt` for password hashing
-- AWS SDK v3 clients (DynamoDB, SES, Secrets Manager)
-- `validator` for email/URL validation
+**esbuild Configuration**
+- Bundle all dependencies into each function for optimal performance
+- Use ES modules with .mjs output extension for proper Node.js recognition
+- Target Node.js 20 runtime for AWS Lambda compatibility
+- Minify and tree-shake for smaller bundle sizes
+- Source maps enabled for debugging
 
 **Package Management**: PNPM must be used for all dependency management instead of npm. This provides faster installs, better disk space efficiency, and stricter dependency resolution that prevents phantom dependencies.
 
-**Shared Core Layer (Layer 2)**
+**Shared lib/ Directory Structure**
 - HTTP utilities (request parsing, response building)
 - Authentication utilities (JWT verification, role checking)
 - Data access patterns (DynamoDB client factory, query helpers)
 - Error handling (standardized error types and responses)
 - Security utilities (input sanitization, PII-safe logging)
 - Configuration management (environment variable validation)
+
+**Dependencies Bundled with Each Function**
+- AWS SDK v3 clients (DynamoDB, SES, Secrets Manager)
+- `jose` library for JWT operations
+- `zod` for runtime validation
+- `bcryptjs` for password hashing
+- `validator` for email/URL validation
 
 ### API Gateway Configuration
 

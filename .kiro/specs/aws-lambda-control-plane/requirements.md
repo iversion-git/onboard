@@ -2,7 +2,7 @@
 
 ## Introduction
 
-The AWS Lambda Control Plane API is a serverless "control plane" for an ERP provisioning workflow. The system runs on AWS Lambda behind API Gateway (HTTP API) and provides staff authentication using JWT tokens, comprehensive staff and role administration, secure password reset functionality via Amazon SES, and controlled tenant registration that triggers downstream provisioning workflows. The system follows a microservices architecture with small, focused Lambda functions and shared utility layers for consistent behavior across all endpoints.
+The AWS Lambda Control Plane API is a serverless "control plane" for an ERP provisioning workflow. The system runs on AWS Lambda behind API Gateway (HTTP API) and provides staff authentication using JWT tokens, comprehensive staff and role administration, secure password reset functionality via Amazon SES, and controlled tenant registration that triggers downstream provisioning workflows. The system follows a microservices architecture with small, focused Lambda functions using a bundled deployment approach with esbuild for optimal performance and simplified dependency management.
 
 ## Glossary
 
@@ -11,7 +11,7 @@ The AWS Lambda Control Plane API is a serverless "control plane" for an ERP prov
 - **JWT_Token**: JSON Web Token used for authentication containing staff identity and role information
 - **Tenant**: A customer entity that requires ERP provisioning services
 - **Lambda_Authorizer**: A centralized API Gateway Lambda function that verifies JWT tokens and enforces role-based access control
-- **Shared_Core_Layer**: A Lambda Layer containing common utilities for HTTP handling, validation, authentication, and data access
+- **Bundled_Functions**: Lambda functions with all dependencies bundled using esbuild for optimal performance and simplified deployment
 - **Password_Reset_Token**: A time-limited, hashed token used for secure password reset operations
 - **DynamoDB_Tables**: NoSQL database tables storing staff, tenant, and password reset token data
 - **SES_Service**: Amazon Simple Email Service used for sending password reset emails
@@ -104,15 +104,15 @@ The AWS Lambda Control Plane API is a serverless "control plane" for an ERP prov
 
 ### Requirement 8
 
-**User Story:** As a system architect, I want modular Lambda functions with shared utilities, so that the system follows single responsibility principles and maintains consistency.
+**User Story:** As a system architect, I want modular Lambda functions with bundled dependencies, so that the system follows single responsibility principles while maintaining optimal performance and simplified deployment.
 
 #### Acceptance Criteria
 
 1. WHEN implementing business logic, THE Control_Plane_API SHALL use separate Lambda functions for each API endpoint
-2. WHEN Lambda functions need common functionality, THE Control_Plane_API SHALL use Shared_Core_Layer for HTTP handling, validation, and data access
-3. WHEN packaging dependencies, THE Control_Plane_API SHALL use Lambda Layers to avoid vendoring node_modules in individual functions
-4. WHEN deploying functions, THE Control_Plane_API SHALL support incremental deployment of individual functions without affecting others
-5. WHEN adding new endpoints, THE Control_Plane_API SHALL follow the established patterns for consistency and maintainability
+2. WHEN Lambda functions need common functionality, THE Control_Plane_API SHALL use shared lib/ utilities bundled with each function
+3. WHEN packaging dependencies, THE Control_Plane_API SHALL use esbuild to bundle all dependencies into each function for optimal performance
+4. WHEN deploying functions, THE Control_Plane_API SHALL support incremental deployment of individual functions without layer dependencies
+5. WHEN adding new endpoints, THE Control_Plane_API SHALL follow the established bundled patterns for consistency and maintainability
 
 ### Requirement 9
 

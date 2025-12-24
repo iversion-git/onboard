@@ -1,28 +1,19 @@
 # Implementation Plan
 
-- [x] 1. Set up project structure and package management
-
-
-
-
-
-  - Create directory structure following recommended layout (api/, core/, layers/, tests/)
+- [ ] 1. Set up project structure and package management
+  - Create directory structure following bundled approach (api/, lib/, tests/)
   - Initialize PNPM workspace with package.json and pnpm-workspace.yaml
-  - Configure TypeScript with strict settings for Node.js 24
-  - Set up Serverless Framework v3 configuration
-  - _Requirements: 8.1, 8.3, PNPM requirement_
+  - Configure TypeScript with strict settings for Node.js 20
+  - Set up Serverless Framework v3 with esbuild bundling configuration
+  - Configure esbuild for ES modules with .mjs output extension
+  - _Requirements: 8.1, 8.3, PNPM requirement, ESM compatibility_
 
 - [ ]* 1.1 Write property test for PNPM usage validation
   - **Property 11: PNPM dependency management**
   - **Validates: Package management requirements**
 
-- [x] 2. Create shared core layer foundation
-
-
-
-
-
-  - Implement HTTP utilities (request parsing, response building, CORS handling)
+- [ ] 2. Create shared lib utilities foundation
+  - Implement HTTP utilities (request parsing, response building, CORS handling) in lib/
   - Create error handling system with standardized error types and responses
   - Build configuration management with environment variable validation
   - Set up logging utilities with PII-safe logging helpers
@@ -36,13 +27,8 @@
   - **Property 5: Sensitive data protection**
   - **Validates: Requirements 1.5, 3.2, 5.4, 7.3**
 
-- [x] 3. Set up dependencies layer and AWS integrations
-
-
-
-
-
-  - Create Lambda Layer with AWS Lambda Powertools, jose, zod, bcrypt, AWS SDK v3
+- [ ] 3. Set up bundled dependencies and AWS integrations
+  - Configure esbuild to bundle AWS SDK v3, jose, zod, bcryptjs with each function
   - Configure DynamoDB client factory with retry patterns and table name resolution
   - Implement SES helpers for templated email sending
   - Set up Secrets Manager integration for JWT signing key
@@ -52,13 +38,9 @@
   - **Property 7: Email normalization**
   - **Validates: Requirements 9.2**
 
-- [x] 4. Implement JWT authentication system
-
-
-
-
-  - Create JWT signing and verification utilities using jose library
-  - Implement password hashing and verification with bcrypt
+- [ ] 4. Implement JWT authentication system
+  - Create JWT signing and verification utilities using jose library in lib/
+  - Implement password hashing and verification with bcryptjs
   - Build authentication context management
   - Set up JWT signing key retrieval from Secrets Manager with caching
   - _Requirements: 1.1, 1.4, 1.5, 6.1_
@@ -71,11 +53,7 @@
   - **Property 2: Invalid authentication rejection**
   - **Validates: Requirements 1.2, 1.3**
 
-- [x] 5. Create Lambda Authorizer for centralized JWT verification
-
-
-
-
+- [ ] 5. Create Lambda Authorizer for centralized JWT verification
   - Implement Lambda Authorizer with JWT verification and role-based access control
   - Configure authorization result caching with 5-minute TTL
   - Build context passing to business lambdas
@@ -90,11 +68,7 @@
   - **Property 8: JWT authorizer context passing**
   - **Validates: Requirements 6.1, 6.3**
 
-- [x] 6. Implement DynamoDB data models and access patterns
-
-
-
-
+- [ ] 6. Implement DynamoDB data models and access patterns
   - Create Staff table schema with EmailIndex GSI
   - Implement PasswordResetTokens table with TTL configuration
   - Create Tenants table schema
@@ -105,12 +79,7 @@
   - **Property 9: Duplicate prevention**
   - **Validates: Requirements 2.5, 4.5**
 
-- [x] 7. Build authentication endpoints
-
-
-
-
-
+- [ ] 7. Build authentication endpoints
   - Implement POST /auth/login with credential validation and JWT generation
   - Create POST /auth/password-reset/request with token generation and SES integration
   - Build POST /auth/password-reset/confirm with token validation and password update
@@ -136,11 +105,12 @@
   - _Requirements: 4.1, 4.2, 4.3, 4.4_
 
 - [ ] 11. Configure Serverless Framework deployment
-  - Set up serverless.yml with HTTP API Gateway configuration
+  - Set up serverless.yml with HTTP API Gateway configuration and esbuild bundling
   - Configure Lambda functions with proper IAM roles per function
-  - Set up Lambda Layers deployment for dependencies and shared core
+  - Remove Lambda Layers configuration in favor of bundled approach
   - Configure DynamoDB tables with stage-scoped naming
-  - _Requirements: 8.4, 9.4, 10.1, 10.2_
+  - Ensure .mjs output extension for proper ES module handling
+  - _Requirements: 8.4, 9.4, 10.1, 10.2, ESM compatibility_
 
 - [ ]* 11.1 Write property test for observability consistency
   - **Property 10: Observability consistency**
