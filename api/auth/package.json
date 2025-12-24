@@ -1,0 +1,8 @@
+{
+  "name": "@api/auth",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "zod": "^3.22.0"
+  }
+}

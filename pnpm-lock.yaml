@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      '@types/aws-lambda':
+        specifier: ^8.10.0
+        version: 8.10.159
       '@types/node':
         specifier: ^20.11.0
         version: 20.19.27
@@ -35,6 +38,12 @@ importers:
       vitest:
         specifier: ^1.2.0
         version: 1.6.1(@types/node@20.19.27)(@vitest/ui@1.6.1)
+
+  api/auth:
+    dependencies:
+      zod:
+        specifier: ^3.22.0
+        version: 3.25.76
 
   layers/dependencies:
     dependencies:
