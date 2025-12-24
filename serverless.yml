@@ -1,37 +1,37 @@
 service: aws-lambda-control-plane
-
-frameworkVersion: '3'
+frameworkVersion: "3"
 
 provider:
   name: aws
-  runtime: nodejs20.x  # Will be updated to nodejs24.x when available
+  runtime: nodejs24.x
   stage: ${opt:stage, 'dev'}
-  region: ${opt:region, 'us-east-1'}
-  memorySize: 512
-  timeout: 30
+  region: ${opt:region, 'ap-southeast-2'}
+  architecture: x86_64
+
+  # Sensible defaults; override per-function where needed
+  memorySize: 256
+  timeout: 10
   logRetentionInDays: 14
-  
-  # Environment variables
+
   environment:
     STAGE: ${self:provider.stage}
     REGION: ${self:provider.region}
+
     STAFF_TABLE: Staff-${self:provider.stage}
     PASSWORD_RESET_TOKENS_TABLE: PasswordResetTokens-${self:provider.stage}
     TENANTS_TABLE: Tenants-${self:provider.stage}
+
+    # Store secret name (or switch to ARN if you prefer)
     JWT_SECRET_NAME: ${self:service}-${self:provider.stage}-jwt-secret
-    
-  # API Gateway HTTP API configuration
+
   httpApi:
     cors:
       allowedOrigins:
-        - http://localhost:3000  # Development
-        - https://*.${self:provider.stage}.example.com  # Production domains
+        - http://localhost:3000
+        # Prefer explicit prod domains later (wildcards can be tricky)
       allowedHeaders:
         - Content-Type
         - Authorization
-        - X-Amz-Date
-        - X-Api-Key
-        - X-Amz-Security-Token
         - X-Correlation-Id
       allowedMethods:
         - GET
@@ -40,138 +40,173 @@ provider:
         - DELETE
         - OPTIONS
       allowCredentials: true
-    
-    # Lambda Authorizer configuration
+
     authorizers:
       jwtAuthorizer:
         type: request
         functionName: authorizer
-        resultTtlInSeconds: 300  # 5 minutes cache
         identitySource:
           - $request.header.Authorization
+        # Cache authorizer result (decision), not the token itself
+        resultTtlInSeconds: 300
         enableSimpleResponses: true
 
-  # IAM role statements
+  # IMPORTANT: enforce least-privilege by NOT granting broad provider role
   iam:
     role:
-      statements:
-        # DynamoDB permissions
-        - Effect: Allow
-          Action:
-            - dynamodb:Query
-            - dynamodb:GetItem
-            - dynamodb:PutItem
-            - dynamodb:UpdateItem
-            - dynamodb:DeleteItem
-          Resource:
-            - arn:aws:dynamodb:${self:provider.region}:*:table/Staff-${self:provider.stage}
-            - arn:aws:dynamodb:${self:provider.region}:*:table/Staff-${self:provider.stage}/index/*
-            - arn:aws:dynamodb:${self:provider.region}:*:table/PasswordResetTokens-${self:provider.stage}
-            - arn:aws:dynamodb:${self:provider.region}:*:table/Tenants-${self:provider.stage}
-        
-        # Secrets Manager permissions
-        - Effect: Allow
-          Action:
-            - secretsmanager:GetSecretValue
-          Resource:
-            - arn:aws:secretsmanager:${self:provider.region}:*:secret:${self:service}-${self:provider.stage}-jwt-secret*
-        
-        # SES permissions
-        - Effect: Allow
-          Action:
-            - ses:SendEmail
-            - ses:SendTemplatedEmail
-          Resource: "*"
-        
-        # X-Ray tracing permissions
-        - Effect: Allow
-          Action:
-            - xray:PutTraceSegments
-            - xray:PutTelemetryRecords
-          Resource: "*"
+      statements: []
 
-  # X-Ray tracing
-  tracing:
-    lambda: true
-    apiGateway: true
+plugins:
+  - serverless-esbuild
+  - serverless-offline
+  - serverless-iam-roles-per-function
 
-# Lambda Layers
-layers:
-  dependencies:
-    path: layers/dependencies
-    name: ${self:service}-${self:provider.stage}-dependencies
-    description: External dependencies layer (AWS SDK, jose, zod, bcrypt, etc.)
-    compatibleRuntimes:
-      - nodejs20.x
-    retain: false
-  
-  sharedCore:
-    path: layers/shared-core
-    name: ${self:service}-${self:provider.stage}-shared-core
-    description: Shared core utilities layer
-    compatibleRuntimes:
-      - nodejs20.x
-    retain: false
+package:
+  patterns:
+    - "!node_modules/**"
+    - "!**/*.test.*"
+    - "!tests/**"
+    - "!**/__tests__/**"
+    - "!**/.cache/**"
+    - "!**/.serverless/**"
+    - "api/**"
+    - "src/**"
+    - "package.json"
+    - "pnpm-lock.yaml"
 
-# Lambda Functions
+custom:
+  esbuild:
+    bundle: true
+    minify: true
+    sourcemap: true
+    target: node24
+    platform: node
+    concurrency: 10
+    # AWS provides AWS SDK v2 in runtime; we recommend AWS SDK v3 (bundled).
+    # If you use v3 (@aws-sdk/*), do NOT exclude it.
+    exclude:
+      - aws-sdk
+
 functions:
-  # Lambda Authorizer
+  # -----------------------
+  # Authorizer (JWT verify)
+  # -----------------------
   authorizer:
     handler: api/authorizer.handler
     description: JWT verification and role-based access control
-    layers:
-      - { Ref: DependenciesLambdaLayer }
-      - { Ref: SharedCoreLambdaLayer }
+    memorySize: 256
+    timeout: 5
     environment:
       LOG_LEVEL: INFO
-  
-  # Authentication endpoints
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - secretsmanager:GetSecretValue
+        Resource:
+          - arn:aws:secretsmanager:${self:provider.region}:*:secret:${self:service}-${self:provider.stage}-jwt-secret*
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+          - dynamodb:GetItem
+        Resource:
+          - arn:aws:dynamodb:${self:provider.region}:*:table/Staff-${self:provider.stage}
+          - arn:aws:dynamodb:${self:provider.region}:*:table/Staff-${self:provider.stage}/index/*
+      - Effect: Allow
+        Action:
+          - xray:PutTraceSegments
+          - xray:PutTelemetryRecords
+        Resource: "*"
+
+  # -----------------------
+  # Auth
+  # -----------------------
   login:
     handler: api/auth/login.handler
     description: Staff login with JWT generation
-    layers:
-      - { Ref: DependenciesLambdaLayer }
-      - { Ref: SharedCoreLambdaLayer }
+    memorySize: 512     # bcrypt/crypto typically needs more CPU
+    timeout: 10
     events:
       - httpApi:
           path: /auth/login
           method: post
     environment:
       LOG_LEVEL: INFO
-  
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+          - dynamodb:GetItem
+        Resource:
+          - arn:aws:dynamodb:${self:provider.region}:*:table/Staff-${self:provider.stage}
+          - arn:aws:dynamodb:${self:provider.region}:*:table/Staff-${self:provider.stage}/index/*
+      - Effect: Allow
+        Action:
+          - secretsmanager:GetSecretValue
+        Resource:
+          - arn:aws:secretsmanager:${self:provider.region}:*:secret:${self:service}-${self:provider.stage}-jwt-secret*
+
   passwordResetRequest:
     handler: api/auth/password-reset-request.handler
-    description: Request password reset token
-    layers:
-      - { Ref: DependenciesLambdaLayer }
-      - { Ref: SharedCoreLambdaLayer }
+    description: Request password reset token (sends email)
+    memorySize: 256
+    timeout: 10
     events:
       - httpApi:
           path: /auth/password-reset/request
           method: post
     environment:
       LOG_LEVEL: INFO
-  
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:Query
+          - dynamodb:GetItem
+        Resource:
+          - arn:aws:dynamodb:${self:provider.region}:*:table/Staff-${self:provider.stage}
+          - arn:aws:dynamodb:${self:provider.region}:*:table/Staff-${self:provider.stage}/index/*
+      - Effect: Allow
+        Action:
+          - dynamodb:PutItem
+        Resource:
+          - arn:aws:dynamodb:${self:provider.region}:*:table/PasswordResetTokens-${self:provider.stage}
+      - Effect: Allow
+        Action:
+          - ses:SendEmail
+          - ses:SendTemplatedEmail
+        Resource: "*"
+
   passwordResetConfirm:
     handler: api/auth/password-reset-confirm.handler
     description: Confirm password reset with token
-    layers:
-      - { Ref: DependenciesLambdaLayer }
-      - { Ref: SharedCoreLambdaLayer }
+    memorySize: 512     # hashing new password can be CPU-bound
+    timeout: 10
     events:
       - httpApi:
           path: /auth/password-reset/confirm
           method: post
     environment:
       LOG_LEVEL: INFO
-  
-  # Staff management endpoints
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:GetItem
+          - dynamodb:DeleteItem
+        Resource:
+          - arn:aws:dynamodb:${self:provider.region}:*:table/PasswordResetTokens-${self:provider.stage}
+      - Effect: Allow
+        Action:
+          - dynamodb:UpdateItem
+        Resource:
+          - arn:aws:dynamodb:${self:provider.region}:*:table/Staff-${self:provider.stage}
+
+  # -----------------------
+  # Staff (protected)
+  # -----------------------
   staffRegister:
     handler: api/staff/register.handler
     description: Register new staff (admin only)
-    layers:
-      - { Ref: DependenciesLambdaLayer }
-      - { Ref: SharedCoreLambdaLayer }
+    memorySize: 512
+    timeout: 10
     events:
       - httpApi:
           path: /staff/register
@@ -180,13 +215,18 @@ functions:
             name: jwtAuthorizer
     environment:
       LOG_LEVEL: INFO
-  
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:PutItem
+        Resource:
+          - arn:aws:dynamodb:${self:provider.region}:*:table/Staff-${self:provider.stage}
+
   staffEnable:
     handler: api/staff/enable.handler
     description: Enable staff account (admin only)
-    layers:
-      - { Ref: DependenciesLambdaLayer }
-      - { Ref: SharedCoreLambdaLayer }
+    memorySize: 256
+    timeout: 10
     events:
       - httpApi:
           path: /staff/enable
@@ -195,13 +235,18 @@ functions:
             name: jwtAuthorizer
     environment:
       LOG_LEVEL: INFO
-  
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:UpdateItem
+        Resource:
+          - arn:aws:dynamodb:${self:provider.region}:*:table/Staff-${self:provider.stage}
+
   staffDisable:
     handler: api/staff/disable.handler
     description: Disable staff account (admin only)
-    layers:
-      - { Ref: DependenciesLambdaLayer }
-      - { Ref: SharedCoreLambdaLayer }
+    memorySize: 256
+    timeout: 10
     events:
       - httpApi:
           path: /staff/disable
@@ -210,13 +255,18 @@ functions:
             name: jwtAuthorizer
     environment:
       LOG_LEVEL: INFO
-  
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:UpdateItem
+        Resource:
+          - arn:aws:dynamodb:${self:provider.region}:*:table/Staff-${self:provider.stage}
+
   staffMe:
     handler: api/staff/me.handler
     description: Get current staff profile
-    layers:
-      - { Ref: DependenciesLambdaLayer }
-      - { Ref: SharedCoreLambdaLayer }
+    memorySize: 256
+    timeout: 10
     events:
       - httpApi:
           path: /staff/me
@@ -225,14 +275,21 @@ functions:
             name: jwtAuthorizer
     environment:
       LOG_LEVEL: INFO
-  
-  # Tenant management endpoints
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:GetItem
+        Resource:
+          - arn:aws:dynamodb:${self:provider.region}:*:table/Staff-${self:provider.stage}
+
+  # -----------------------
+  # Tenant (protected)
+  # -----------------------
   tenantRegister:
     handler: api/tenant/register.handler
     description: Register new tenant (admin/manager only)
-    layers:
-      - { Ref: DependenciesLambdaLayer }
-      - { Ref: SharedCoreLambdaLayer }
+    memorySize: 256
+    timeout: 10
     events:
       - httpApi:
           path: /tenant/register
@@ -241,11 +298,15 @@ functions:
             name: jwtAuthorizer
     environment:
       LOG_LEVEL: INFO
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb:PutItem
+        Resource:
+          - arn:aws:dynamodb:${self:provider.region}:*:table/Tenants-${self:provider.stage}
 
-# DynamoDB Tables
 resources:
   Resources:
-    # Staff table
     StaffTable:
       Type: AWS::DynamoDB::Table
       Properties:
@@ -266,19 +327,11 @@ resources:
                 KeyType: HASH
             Projection:
               ProjectionType: ALL
-        StreamSpecification:
-          StreamViewType: NEW_AND_OLD_IMAGES
         PointInTimeRecoverySpecification:
           PointInTimeRecoveryEnabled: true
         SSESpecification:
           SSEEnabled: true
-        Tags:
-          - Key: Environment
-            Value: ${self:provider.stage}
-          - Key: Service
-            Value: ${self:service}
-    
-    # Password Reset Tokens table
+
     PasswordResetTokensTable:
       Type: AWS::DynamoDB::Table
       Properties:
@@ -295,13 +348,7 @@ resources:
           Enabled: true
         SSESpecification:
           SSEEnabled: true
-        Tags:
-          - Key: Environment
-            Value: ${self:provider.stage}
-          - Key: Service
-            Value: ${self:service}
-    
-    # Tenants table
+
     TenantsTable:
       Type: AWS::DynamoDB::Table
       Properties:
@@ -313,47 +360,7 @@ resources:
         KeySchema:
           - AttributeName: tenant_id
             KeyType: HASH
-        StreamSpecification:
-          StreamViewType: NEW_AND_OLD_IMAGES
         PointInTimeRecoverySpecification:
           PointInTimeRecoveryEnabled: true
         SSESpecification:
           SSEEnabled: true
-        Tags:
-          - Key: Environment
-            Value: ${self:provider.stage}
-          - Key: Service
-            Value: ${self:service}
-
-# Plugins
-plugins:
-  - serverless-esbuild
-  - serverless-offline
-
-# Plugin configuration
-custom:
-  esbuild:
-    bundle: true
-    minify: false
-    sourcemap: true
-    exclude:
-      - aws-sdk
-    target: node20
-    define:
-      'require.resolve': undefined
-    platform: node
-    concurrency: 10
-    external:
-      - '@aws-lambda-powertools/logger'
-      - '@aws-lambda-powertools/tracer'
-      - '@aws-lambda-powertools/metrics'
-      - 'jose'
-      - 'zod'
-      - 'bcrypt'
-      - 'validator'
-  
-  serverless-offline:
-    httpPort: 3000
-    lambdaPort: 3002
-    websocketPort: 3001
-    noPrependStageInUrl: true

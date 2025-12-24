@@ -20,3 +20,6 @@ export * from './logging.js';
 
 // AWS integrations
 export * from './aws/index.js';
+
+// Authentication utilities
+export * from './auth.js';

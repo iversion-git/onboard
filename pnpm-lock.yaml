@@ -69,6 +69,12 @@ importers:
 
   layers/shared-core:
     dependencies:
+      bcrypt:
+        specifier: ^5.1.1
+        version: 5.1.1
+      jose:
+        specifier: ^5.2.0
+        version: 5.10.0
       zod:
         specifier: ^3.22.0
         version: 3.25.76
@@ -88,6 +94,9 @@ importers:
       '@types/aws-lambda':
         specifier: ^8.10.0
         version: 8.10.159
+      '@types/bcrypt':
+        specifier: ^5.0.2
+        version: 5.0.2
       '@types/node':
         specifier: ^20.11.0
         version: 20.19.27
