@@ -39,6 +39,14 @@ export function parseRequestBody<T>(
 }
 
 /**
+ * Generate a new correlation ID
+ * Used for tracking requests across services
+ */
+export function generateCorrelationId(): string {
+  return `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
+/**
  * Extract correlation ID from request headers or generate one
  * Uses AWS Lambda's built-in request ID as fallback
  */
@@ -65,10 +73,18 @@ export function getAuthContext(event: APIGatewayProxyEventV2): AuthContext {
     throw createError('Unauthorized', 'Invalid authentication context');
   }
 
+  // Parse roles from JSON string (API Gateway context values are strings)
+  let roles: string[];
+  try {
+    roles = typeof context.roles === 'string' ? JSON.parse(context.roles) : context.roles;
+  } catch (error) {
+    throw createError('Unauthorized', 'Invalid roles format in authentication context');
+  }
+
   return {
     staff_id: context.staff_id,
     email: context.email,
-    roles: Array.isArray(context.roles) ? context.roles : [context.roles],
+    roles: Array.isArray(roles) ? roles : [roles],
     stage: context.stage || process.env['STAGE'] || 'dev'
   };
 }
