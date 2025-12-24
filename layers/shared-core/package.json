@@ -1,0 +1,26 @@
+{
+  "name": "@layers/shared-core",
+  "version": "1.0.0",
+  "description": "Shared core utilities for AWS Lambda Control Plane API",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:properties": "vitest run --reporter=verbose properties",
+    "type-check": "tsc --noEmit",
+    "lint": "echo 'Linting shared-core layer'"
+  },
+  "dependencies": {
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/aws-lambda": "^8.10.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.2.0",
+    "fast-check": "^3.15.0"
+  }
+}
