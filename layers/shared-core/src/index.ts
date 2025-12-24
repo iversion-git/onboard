@@ -17,3 +17,6 @@ export * from './config.js';
 
 // Logging utilities
 export * from './logging.js';
+
+// AWS integrations
+export * from './aws/index.js';
