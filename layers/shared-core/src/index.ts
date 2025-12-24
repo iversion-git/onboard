@@ -23,3 +23,6 @@ export * from './aws/index.js';
 
 // Authentication utilities
 export * from './auth.js';
+
+// Data models
+export * from './models/index.js';

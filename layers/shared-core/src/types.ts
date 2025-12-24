@@ -65,3 +65,14 @@ export interface LogContext {
   operation: string;
   stage: string;
 }
+
+// JWT Token payload structure
+export interface JWTPayload {
+  sub: string;                // staff_id
+  email: string;
+  roles: string[];
+  iat: number;                // issued at
+  exp: number;                // expires at
+  iss?: string;               // issuer (optional)
+  aud?: string;               // audience (optional)
+}

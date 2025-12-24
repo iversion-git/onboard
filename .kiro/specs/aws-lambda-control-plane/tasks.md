@@ -75,6 +75,7 @@
 
 
 
+
   - Implement Lambda Authorizer with JWT verification and role-based access control
   - Configure authorization result caching with 5-minute TTL
   - Build context passing to business lambdas
@@ -89,7 +90,11 @@
   - **Property 8: JWT authorizer context passing**
   - **Validates: Requirements 6.1, 6.3**
 
-- [ ] 6. Implement DynamoDB data models and access patterns
+- [x] 6. Implement DynamoDB data models and access patterns
+
+
+
+
   - Create Staff table schema with EmailIndex GSI
   - Implement PasswordResetTokens table with TTL configuration
   - Create Tenants table schema
