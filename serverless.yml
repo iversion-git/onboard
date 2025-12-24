@@ -1,0 +1,359 @@
+service: aws-lambda-control-plane
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs20.x  # Will be updated to nodejs24.x when available
+  stage: ${opt:stage, 'dev'}
+  region: ${opt:region, 'us-east-1'}
+  memorySize: 512
+  timeout: 30
+  logRetentionInDays: 14
+  
+  # Environment variables
+  environment:
+    STAGE: ${self:provider.stage}
+    REGION: ${self:provider.region}
+    STAFF_TABLE: Staff-${self:provider.stage}
+    PASSWORD_RESET_TOKENS_TABLE: PasswordResetTokens-${self:provider.stage}
+    TENANTS_TABLE: Tenants-${self:provider.stage}
+    JWT_SECRET_NAME: ${self:service}-${self:provider.stage}-jwt-secret
+    
+  # API Gateway HTTP API configuration
+  httpApi:
+    cors:
+      allowedOrigins:
+        - http://localhost:3000  # Development
+        - https://*.${self:provider.stage}.example.com  # Production domains
+      allowedHeaders:
+        - Content-Type
+        - Authorization
+        - X-Amz-Date
+        - X-Api-Key
+        - X-Amz-Security-Token
+        - X-Correlation-Id
+      allowedMethods:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+        - OPTIONS
+      allowCredentials: true
+    
+    # Lambda Authorizer configuration
+    authorizers:
+      jwtAuthorizer:
+        type: request
+        functionName: authorizer
+        resultTtlInSeconds: 300  # 5 minutes cache
+        identitySource:
+          - $request.header.Authorization
+        enableSimpleResponses: true
+
+  # IAM role statements
+  iam:
+    role:
+      statements:
+        # DynamoDB permissions
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource:
+            - arn:aws:dynamodb:${self:provider.region}:*:table/Staff-${self:provider.stage}
+            - arn:aws:dynamodb:${self:provider.region}:*:table/Staff-${self:provider.stage}/index/*
+            - arn:aws:dynamodb:${self:provider.region}:*:table/PasswordResetTokens-${self:provider.stage}
+            - arn:aws:dynamodb:${self:provider.region}:*:table/Tenants-${self:provider.stage}
+        
+        # Secrets Manager permissions
+        - Effect: Allow
+          Action:
+            - secretsmanager:GetSecretValue
+          Resource:
+            - arn:aws:secretsmanager:${self:provider.region}:*:secret:${self:service}-${self:provider.stage}-jwt-secret*
+        
+        # SES permissions
+        - Effect: Allow
+          Action:
+            - ses:SendEmail
+            - ses:SendTemplatedEmail
+          Resource: "*"
+        
+        # X-Ray tracing permissions
+        - Effect: Allow
+          Action:
+            - xray:PutTraceSegments
+            - xray:PutTelemetryRecords
+          Resource: "*"
+
+  # X-Ray tracing
+  tracing:
+    lambda: true
+    apiGateway: true
+
+# Lambda Layers
+layers:
+  dependencies:
+    path: layers/dependencies
+    name: ${self:service}-${self:provider.stage}-dependencies
+    description: External dependencies layer (AWS SDK, jose, zod, bcrypt, etc.)
+    compatibleRuntimes:
+      - nodejs20.x
+    retain: false
+  
+  sharedCore:
+    path: layers/shared-core
+    name: ${self:service}-${self:provider.stage}-shared-core
+    description: Shared core utilities layer
+    compatibleRuntimes:
+      - nodejs20.x
+    retain: false
+
+# Lambda Functions
+functions:
+  # Lambda Authorizer
+  authorizer:
+    handler: api/authorizer.handler
+    description: JWT verification and role-based access control
+    layers:
+      - { Ref: DependenciesLambdaLayer }
+      - { Ref: SharedCoreLambdaLayer }
+    environment:
+      LOG_LEVEL: INFO
+  
+  # Authentication endpoints
+  login:
+    handler: api/auth/login.handler
+    description: Staff login with JWT generation
+    layers:
+      - { Ref: DependenciesLambdaLayer }
+      - { Ref: SharedCoreLambdaLayer }
+    events:
+      - httpApi:
+          path: /auth/login
+          method: post
+    environment:
+      LOG_LEVEL: INFO
+  
+  passwordResetRequest:
+    handler: api/auth/password-reset-request.handler
+    description: Request password reset token
+    layers:
+      - { Ref: DependenciesLambdaLayer }
+      - { Ref: SharedCoreLambdaLayer }
+    events:
+      - httpApi:
+          path: /auth/password-reset/request
+          method: post
+    environment:
+      LOG_LEVEL: INFO
+  
+  passwordResetConfirm:
+    handler: api/auth/password-reset-confirm.handler
+    description: Confirm password reset with token
+    layers:
+      - { Ref: DependenciesLambdaLayer }
+      - { Ref: SharedCoreLambdaLayer }
+    events:
+      - httpApi:
+          path: /auth/password-reset/confirm
+          method: post
+    environment:
+      LOG_LEVEL: INFO
+  
+  # Staff management endpoints
+  staffRegister:
+    handler: api/staff/register.handler
+    description: Register new staff (admin only)
+    layers:
+      - { Ref: DependenciesLambdaLayer }
+      - { Ref: SharedCoreLambdaLayer }
+    events:
+      - httpApi:
+          path: /staff/register
+          method: post
+          authorizer:
+            name: jwtAuthorizer
+    environment:
+      LOG_LEVEL: INFO
+  
+  staffEnable:
+    handler: api/staff/enable.handler
+    description: Enable staff account (admin only)
+    layers:
+      - { Ref: DependenciesLambdaLayer }
+      - { Ref: SharedCoreLambdaLayer }
+    events:
+      - httpApi:
+          path: /staff/enable
+          method: post
+          authorizer:
+            name: jwtAuthorizer
+    environment:
+      LOG_LEVEL: INFO
+  
+  staffDisable:
+    handler: api/staff/disable.handler
+    description: Disable staff account (admin only)
+    layers:
+      - { Ref: DependenciesLambdaLayer }
+      - { Ref: SharedCoreLambdaLayer }
+    events:
+      - httpApi:
+          path: /staff/disable
+          method: post
+          authorizer:
+            name: jwtAuthorizer
+    environment:
+      LOG_LEVEL: INFO
+  
+  staffMe:
+    handler: api/staff/me.handler
+    description: Get current staff profile
+    layers:
+      - { Ref: DependenciesLambdaLayer }
+      - { Ref: SharedCoreLambdaLayer }
+    events:
+      - httpApi:
+          path: /staff/me
+          method: get
+          authorizer:
+            name: jwtAuthorizer
+    environment:
+      LOG_LEVEL: INFO
+  
+  # Tenant management endpoints
+  tenantRegister:
+    handler: api/tenant/register.handler
+    description: Register new tenant (admin/manager only)
+    layers:
+      - { Ref: DependenciesLambdaLayer }
+      - { Ref: SharedCoreLambdaLayer }
+    events:
+      - httpApi:
+          path: /tenant/register
+          method: post
+          authorizer:
+            name: jwtAuthorizer
+    environment:
+      LOG_LEVEL: INFO
+
+# DynamoDB Tables
+resources:
+  Resources:
+    # Staff table
+    StaffTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: Staff-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: staff_id
+            AttributeType: S
+          - AttributeName: email
+            AttributeType: S
+        KeySchema:
+          - AttributeName: staff_id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: EmailIndex
+            KeySchema:
+              - AttributeName: email
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        SSESpecification:
+          SSEEnabled: true
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Service
+            Value: ${self:service}
+    
+    # Password Reset Tokens table
+    PasswordResetTokensTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: PasswordResetTokens-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: token_hash
+            AttributeType: S
+        KeySchema:
+          - AttributeName: token_hash
+            KeyType: HASH
+        TimeToLiveSpecification:
+          AttributeName: expires_at
+          Enabled: true
+        SSESpecification:
+          SSEEnabled: true
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Service
+            Value: ${self:service}
+    
+    # Tenants table
+    TenantsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: Tenants-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: tenant_id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: tenant_id
+            KeyType: HASH
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        SSESpecification:
+          SSEEnabled: true
+        Tags:
+          - Key: Environment
+            Value: ${self:provider.stage}
+          - Key: Service
+            Value: ${self:service}
+
+# Plugins
+plugins:
+  - serverless-esbuild
+  - serverless-offline
+
+# Plugin configuration
+custom:
+  esbuild:
+    bundle: true
+    minify: false
+    sourcemap: true
+    exclude:
+      - aws-sdk
+    target: node20
+    define:
+      'require.resolve': undefined
+    platform: node
+    concurrency: 10
+    external:
+      - '@aws-lambda-powertools/logger'
+      - '@aws-lambda-powertools/tracer'
+      - '@aws-lambda-powertools/metrics'
+      - 'jose'
+      - 'zod'
+      - 'bcrypt'
+      - 'validator'
+  
+  serverless-offline:
+    httpPort: 3000
+    lambdaPort: 3002
+    websocketPort: 3001
+    noPrependStageInUrl: true

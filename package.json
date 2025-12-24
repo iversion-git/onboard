@@ -1,0 +1,41 @@
+{
+  "name": "aws-lambda-control-plane",
+  "version": "1.0.0",
+  "description": "AWS Lambda Control Plane API for ERP provisioning workflow",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "packageManager": "pnpm@9.0.0",
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "test:unit": "pnpm -r test:unit",
+    "test:properties": "pnpm -r test:properties",
+    "lint": "pnpm -r lint",
+    "type-check": "pnpm -r type-check",
+    "deploy": "serverless deploy",
+    "deploy:dev": "serverless deploy --stage dev",
+    "deploy:prod": "serverless deploy --stage prod",
+    "remove": "serverless remove",
+    "logs": "serverless logs -f",
+    "offline": "serverless offline"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.0",
+    "serverless": "^3.38.0",
+    "serverless-offline": "^13.3.0",
+    "serverless-esbuild": "^1.52.0",
+    "esbuild": "^0.19.0",
+    "vitest": "^1.2.0",
+    "fast-check": "^3.15.0",
+    "@vitest/ui": "^1.2.0"
+  },
+  "workspaces": [
+    "api/*",
+    "core",
+    "layers/*"
+  ]
+}

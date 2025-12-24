@@ -1,0 +1,12 @@
+packages:
+  # API Lambda functions
+  - 'api/*'
+  
+  # Shared core utilities
+  - 'core'
+  
+  # Lambda layers
+  - 'layers/*'
+  
+  # Tests (if they need their own workspace)
+  - 'tests'
