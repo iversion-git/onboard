@@ -1,15 +1,85 @@
-service: aws-lambda-control-plane
+# ============================================================================
+# DEPLOYMENT CONFIGURATION - Edit these values to customize your deployment
+# ============================================================================
 
+service: aws-lambda-control-plane  # Change this for multiple stacks
 frameworkVersion: '3'
 
+# ============================================================================
+# CONFIGURATION VARIABLES - EDIT THESE VALUES
+# ============================================================================
+custom:
+  # Basic Settings
+  config:
+    defaultStage: dev
+    defaultRegion: ap-southeast-2
+    awsProfile: node
+    
+    # Security Configuration - CHANGE THESE!
+    jwtSecret: r2P19YQ0kv59MUGL5Ppi9pvGnmmaerxpBox5i0PRpBNd3J1IKptaphEIf7Lbe9BI  # Generate new: node scripts/generate-jwt-secret.js
+    sesFromEmail: noreply@example.com
+    
+    # Performance Configuration
+    lambdaMemory: 1024
+    lambdaTimeout: 29  # Reduced to avoid HTTP API timeout warning
+    lambdaArchitecture: arm64
+    # Removed reserved and provisioned concurrency to minimize costs
+    # reservedConcurrency: 100
+    # provisionedConcurrency: 5
+    
+    # CORS Configuration by Stage
+    corsOrigins:
+      dev: "*"
+      staging: "https://staging.example.com"
+      prod: "https://app.example.com"
+    
+    # Performance Monitoring Thresholds
+    performance:
+      p50ResponseTime: 300
+      p95ResponseTime: 500
+      p95ColdStart: 1200
+    
+    # CloudWatch Alarms Configuration
+    alarms:
+      lambdaDurationThreshold: 500
+      lambdaErrorThreshold: 10
+      api4xxErrorThreshold: 20
+      api5xxErrorThreshold: 5
+
+  # esbuild configuration for single function bundling
+  esbuild:
+    bundle: true
+    minify: true
+    sourcemap: true
+    target: node20
+    format: esm
+    platform: node
+    outExtension:
+      .js: .mjs
+    mainFields: [module, main]
+    external: []
+    packager: pnpm
+    installExtraArgs: ['--frozen-lockfile']
+    keepOutputDirectory: true
+    exclude: []
+    treeShaking: true
+    entryPoints:
+      - index.ts
+    watch:
+      pattern: ['**/*.ts', '**/*.js']
+      ignore: ['node_modules/**', 'dist/**', '.serverless/**', 'tests/**']
+
+# ============================================================================
+# PROVIDER CONFIGURATION - Uses variables from above
+# ============================================================================
 provider:
   name: aws
   runtime: nodejs20.x
-  stage: ${opt:stage, 'dev'}
-  region: ${opt:region, 'us-east-1'}
-  memorySize: 1024  # Increased for single function handling all routes
-  timeout: 30
-  architecture: arm64
+  stage: ${opt:stage, self:custom.config.defaultStage}
+  region: ${opt:region, self:custom.config.defaultRegion}
+  memorySize: ${self:custom.config.lambdaMemory}
+  timeout: ${self:custom.config.lambdaTimeout}
+  architecture: ${self:custom.config.lambdaArchitecture}
   environment:
     STAGE: ${self:provider.stage}
     NODE_ENV: ${self:provider.stage}
@@ -17,14 +87,12 @@ provider:
     DYNAMODB_STAFF_TABLE: Staff-${self:provider.stage}
     DYNAMODB_PASSWORD_RESET_TOKENS_TABLE: PasswordResetTokens-${self:provider.stage}
     DYNAMODB_TENANTS_TABLE: Tenants-${self:provider.stage}
-    # JWT secret from environment variable (Requirements 9.6)
-    JWT_SECRET: ${env:JWT_SECRET}
-    # SES configuration
-    SES_FROM_EMAIL: ${env:SES_FROM_EMAIL, 'noreply@example.com'}
+    # JWT secret from config (Requirements 9.6)
+    JWT_SECRET: ${self:custom.config.jwtSecret}
+    # SES configuration from config
+    SES_FROM_EMAIL: ${self:custom.config.sesFromEmail}
     # CORS origins for environment-specific configuration (Requirements 9.5)
-    CORS_ORIGINS: ${self:custom.corsOrigins.${self:provider.stage}}
-    # Performance monitoring configuration (Requirements 10.1, 10.2)
-    AWS_LAMBDA_EXEC_WRAPPER: /opt/otel-instrument
+    CORS_ORIGINS: ${self:custom.config.corsOrigins.${self:provider.stage}}
   iam:
     role:
       statements:
@@ -71,7 +139,7 @@ provider:
     name: ${self:service}-${self:provider.stage}-api
     cors:
       allowedOrigins:
-        - ${self:custom.corsOrigins.${self:provider.stage}}
+        - ${self:custom.config.corsOrigins.${self:provider.stage}}
       allowedHeaders:
         - Content-Type
         - Authorization
@@ -88,8 +156,10 @@ provider:
         - OPTIONS
       allowCredentials: false
       maxAge: 86400
-    # Note: HTTP API throttling is configured at the route level in resources section
 
+# ============================================================================
+# FUNCTIONS CONFIGURATION
+# ============================================================================
 functions:
   # Single Lambda function with internal routing (Requirements 8.1, 8.2, 8.4)
   api:
@@ -105,65 +175,21 @@ functions:
           path: /
           method: ANY
     environment:
-      # X-Ray tracing configuration
-      _X_AMZN_TRACE_ID: ${env:_X_AMZN_TRACE_ID, ''}
       # Function-specific environment variables
       FUNCTION_NAME: ${self:service}-${self:provider.stage}-api
-    # Performance optimization for single function (Requirements 10.1, 10.2)
-    reservedConcurrency: 100  # Adjust based on expected load
-    provisionedConcurrency: 5  # Keep warm instances for better performance
+    # Removed concurrency settings to minimize costs when not in use
+    # reservedConcurrency: ${self:custom.config.reservedConcurrency}
+    # provisionedConcurrency: ${self:custom.config.provisionedConcurrency}
 
+# ============================================================================
+# PLUGINS
+# ============================================================================
 plugins:
   - serverless-esbuild
 
-custom:
-  # esbuild configuration for single function bundling (Requirements 8.3)
-  esbuild:
-    bundle: true
-    minify: true
-    sourcemap: true
-    target: node20
-    format: esm
-    platform: node
-    outExtension:
-      .js: .mjs
-    mainFields: [module, main]
-    external: []
-    packager: pnpm
-    installExtraArgs: ['--frozen-lockfile']
-    keepOutputDirectory: true
-    exclude: []
-    # Bundle all dependencies into the single function for optimal performance
-    bundleNodeModules: true
-    # Optimize for Lambda cold starts (Requirements 10.2)
-    treeShaking: true
-    # Include all AWS SDK v3 clients and dependencies
-    bundleExternalDependencies: true
-    # Single entry point configuration
-    entryPoints:
-      - index.ts
-    watch:
-      pattern: ['**/*.ts', '**/*.js']
-      ignore: ['node_modules/**', 'dist/**', '.serverless/**', 'tests/**']
-  
-  # Environment-specific configurations (Requirements 9.5)
-  corsOrigins:
-    dev: '*'
-    staging: 'https://staging.example.com'
-    prod: 'https://app.example.com'
-  
-  # Domain configuration for future use
-  domain:
-    dev: 'dev.example.com'
-    staging: 'staging.example.com'
-    prod: 'example.com'
-  
-  # Performance monitoring thresholds (Requirements 10.1)
-  performanceThresholds:
-    p50ResponseTime: 300  # milliseconds
-    p95ResponseTime: 500  # milliseconds
-    p95ColdStart: 1200    # milliseconds
-
+# ============================================================================
+# AWS RESOURCES
+# ============================================================================
 resources:
   Resources:
     # DynamoDB Tables with stage-scoped naming (Requirements 8.4)
@@ -265,7 +291,7 @@ resources:
         Statistic: Average
         Period: 300
         EvaluationPeriods: 2
-        Threshold: 500  # 500ms threshold for p95
+        Threshold: ${self:custom.config.alarms.lambdaDurationThreshold}
         ComparisonOperator: GreaterThanThreshold
         Dimensions:
           - Name: FunctionName
@@ -283,7 +309,7 @@ resources:
         Statistic: Sum
         Period: 300
         EvaluationPeriods: 2
-        Threshold: 10  # 10 errors in 5 minutes
+        Threshold: ${self:custom.config.alarms.lambdaErrorThreshold}
         ComparisonOperator: GreaterThanThreshold
         Dimensions:
           - Name: FunctionName
@@ -301,7 +327,7 @@ resources:
         Statistic: Sum
         Period: 300
         EvaluationPeriods: 2
-        Threshold: 20  # 20 4xx errors in 5 minutes
+        Threshold: ${self:custom.config.alarms.api4xxErrorThreshold}
         ComparisonOperator: GreaterThanThreshold
         Dimensions:
           - Name: ApiName
@@ -319,13 +345,12 @@ resources:
         Statistic: Sum
         Period: 300
         EvaluationPeriods: 1
-        Threshold: 5  # 5 5xx errors in 5 minutes
+        Threshold: ${self:custom.config.alarms.api5xxErrorThreshold}
         ComparisonOperator: GreaterThanThreshold
         Dimensions:
           - Name: ApiName
             Value: ${self:service}-${self:provider.stage}-api
         TreatMissingData: notBreaching
-    # Set JWT_SECRET environment variable before deployment
 
   Outputs:
     # API Gateway outputs
@@ -386,6 +411,6 @@ resources:
     PerformanceThresholds:
       Description: Performance monitoring thresholds
       Value:
-        Fn::Sub: "p50: ${self:custom.performanceThresholds.p50ResponseTime}ms, p95: ${self:custom.performanceThresholds.p95ResponseTime}ms, cold start p95: ${self:custom.performanceThresholds.p95ColdStart}ms"
+        Fn::Sub: "p50: ${self:custom.config.performance.p50ResponseTime}ms, p95: ${self:custom.config.performance.p95ResponseTime}ms, cold start p95: ${self:custom.config.performance.p95ColdStart}ms"
       Export:
         Name: ${self:service}-${self:provider.stage}-performance-thresholds

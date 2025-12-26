@@ -143,8 +143,46 @@ export class InternalRouter {
 
   // Main handler for Lambda proxy integration
   async handle(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
-    const method = event.httpMethod.toUpperCase();
-    const path = event.path;
+    // Handle both REST API and HTTP API event formats
+    const method = (event.httpMethod || (event as any).requestContext?.http?.method)?.toUpperCase();
+    const path = event.path || (event as any).rawPath;
+
+    // Validate that we have the required fields
+    if (!method) {
+      return {
+        statusCode: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        },
+        body: JSON.stringify({
+          error: {
+            code: 'BadRequest',
+            message: 'Missing HTTP method in request',
+            correlationId: event.requestContext?.requestId || 'unknown'
+          },
+          timestamp: new Date().toISOString()
+        })
+      };
+    }
+
+    if (!path) {
+      return {
+        statusCode: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        },
+        body: JSON.stringify({
+          error: {
+            code: 'BadRequest',
+            message: 'Missing path in request',
+            correlationId: event.requestContext?.requestId || 'unknown'
+          },
+          timestamp: new Date().toISOString()
+        })
+      };
+    }
 
     // Handle CORS preflight requests
     if (method === 'OPTIONS') {
@@ -173,7 +211,7 @@ export class InternalRouter {
           error: {
             code: 'NotFound',
             message: `Route ${method} ${path} not found`,
-            correlationId: event.requestContext.requestId
+            correlationId: event.requestContext?.requestId || 'unknown'
           },
           timestamp: new Date().toISOString()
         })

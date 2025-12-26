@@ -78,8 +78,12 @@ export function createInternalRequest(
   lambdaContext: Context,
   pathParams: Record<string, string> = {}
 ): InternalRequest {
+  // Handle both REST API and HTTP API event formats
+  const method = (event.httpMethod || (event as any).requestContext?.http?.method)?.toUpperCase() || 'GET';
+  const path = event.path || (event as any).rawPath || '/';
+  
   const correlationId = event.headers?.['x-correlation-id'] || 
-                       event.requestContext.requestId || 
+                       event.requestContext?.requestId || 
                        randomUUID();
 
   // Initialize empty auth context - will be populated by auth middleware
@@ -88,8 +92,8 @@ export function createInternalRequest(
   };
 
   return {
-    method: event.httpMethod.toUpperCase(),
-    path: event.path,
+    method,
+    path,
     headers: parseHeaders(event),
     body: parseRequestBody(event),
     query: parseQueryParameters(event),

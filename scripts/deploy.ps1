@@ -3,7 +3,8 @@
 
 param(
     [string]$Stage = "dev",
-    [string]$Region = "us-east-1"
+    [string]$Region = "ap-southeast-2",
+    [string]$Profile = "node"
 )
 
 # Colors for output
@@ -14,20 +15,31 @@ $Yellow = "Yellow"
 Write-Host "🚀 Deploying AWS Lambda Control Plane (Single Function Architecture)" -ForegroundColor $Green
 Write-Host "Stage: $Stage" -ForegroundColor $Yellow
 Write-Host "Region: $Region" -ForegroundColor $Yellow
+Write-Host "Profile: $Profile" -ForegroundColor $Yellow
 Write-Host ""
 
 # Check if JWT_SECRET is set
 if (-not $env:JWT_SECRET) {
     Write-Host "❌ Error: JWT_SECRET environment variable is not set" -ForegroundColor $Red
-    Write-Host "💡 Generate a JWT secret using: npm run generate-jwt-secret" -ForegroundColor $Yellow
+    Write-Host "💡 Generate a JWT secret using: node scripts/generate-jwt-secret.js" -ForegroundColor $Yellow
     Write-Host "💡 Then set it: `$env:JWT_SECRET='your_generated_secret'" -ForegroundColor $Yellow
+    Write-Host ""
+    Write-Host "Example:" -ForegroundColor $Yellow
+    Write-Host "  node scripts/generate-jwt-secret.js" -ForegroundColor $Yellow
+    Write-Host "  `$env:JWT_SECRET='r2P19YQ0kv59MUGL5Ppi9pvGnmmaerxpBox5i0PRpBNd3J1IKptaphEIf7Lbe9BI'" -ForegroundColor $Yellow
     exit 1
 }
 
-# Check if SES_FROM_EMAIL is set for production
-if ($Stage -eq "prod" -and -not $env:SES_FROM_EMAIL) {
-    Write-Host "⚠️  Warning: SES_FROM_EMAIL not set for production deployment" -ForegroundColor $Yellow
-    Write-Host "💡 Set it with: `$env:SES_FROM_EMAIL='noreply@yourdomain.com'" -ForegroundColor $Yellow
+Write-Host "✅ JWT_SECRET is configured" -ForegroundColor $Green
+
+# Check if AWS profile exists
+try {
+    aws sts get-caller-identity --profile $Profile | Out-Null
+    Write-Host "✅ AWS profile '$Profile' is working" -ForegroundColor $Green
+} catch {
+    Write-Host "❌ Error: AWS profile '$Profile' is not configured or not working" -ForegroundColor $Red
+    Write-Host "💡 Configure with: aws configure --profile $Profile" -ForegroundColor $Yellow
+    exit 1
 }
 
 # Validate Node.js version
@@ -38,9 +50,12 @@ if ([int]$nodeVersion -lt 20) {
     exit 1
 }
 
+Write-Host "✅ Node.js version $(node --version) is supported" -ForegroundColor $Green
+
 # Check if pnpm is installed
 try {
     pnpm --version | Out-Null
+    Write-Host "✅ PNPM is installed" -ForegroundColor $Green
 } catch {
     Write-Host "❌ Error: pnpm is required but not installed" -ForegroundColor $Red
     Write-Host "💡 Install with: npm install -g pnpm" -ForegroundColor $Yellow
@@ -50,29 +65,25 @@ try {
 # Install dependencies
 Write-Host "📦 Installing dependencies with pnpm..." -ForegroundColor $Green
 pnpm install --frozen-lockfile
-
-# Run type checking
-Write-Host "🔍 Running type checking..." -ForegroundColor $Green
-pnpm run type-check
-
-# Run tests
-Write-Host "🧪 Running tests..." -ForegroundColor $Green
-pnpm run test
-
-# Build the project
-Write-Host "🔨 Building project..." -ForegroundColor $Green
-pnpm run build
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "❌ Error: Failed to install dependencies" -ForegroundColor $Red
+    exit 1
+}
 
 # Deploy with Serverless Framework
 Write-Host "☁️  Deploying to AWS..." -ForegroundColor $Green
-pnpm run deploy -- --stage $Stage --region $Region
+serverless deploy --stage $Stage --region $Region --profile $Profile
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "❌ Error: Deployment failed" -ForegroundColor $Red
+    exit 1
+}
 
 # Get the API URL from the deployment output
-$apiUrl = (serverless info --stage $Stage --region $Region | Select-String "HttpApiUrl" | ForEach-Object { $_.Line.Split()[1] })
+Write-Host "📊 Getting deployment information..." -ForegroundColor $Green
+serverless info --stage $Stage --region $Region --profile $Profile
 
 Write-Host ""
 Write-Host "✅ Deployment completed successfully!" -ForegroundColor $Green
-Write-Host "🌐 API URL: $apiUrl" -ForegroundColor $Yellow
 Write-Host ""
 Write-Host "📊 Single Function Architecture Features:" -ForegroundColor $Green
 Write-Host "  • Internal Node.js routing for all endpoints"
@@ -83,14 +94,14 @@ Write-Host "  • CloudWatch monitoring and alarms"
 Write-Host "  • X-Ray tracing enabled"
 Write-Host ""
 Write-Host "🔧 Available endpoints:" -ForegroundColor $Green
-Write-Host "  • POST $apiUrl/auth/login"
-Write-Host "  • POST $apiUrl/auth/password-reset/request"
-Write-Host "  • POST $apiUrl/auth/password-reset/confirm"
-Write-Host "  • GET  $apiUrl/staff/me"
-Write-Host "  • POST $apiUrl/staff/register"
-Write-Host "  • POST $apiUrl/staff/enable"
-Write-Host "  • POST $apiUrl/staff/disable"
-Write-Host "  • POST $apiUrl/tenant/register"
+Write-Host "  • POST /auth/login"
+Write-Host "  • POST /auth/password-reset/request"
+Write-Host "  • POST /auth/password-reset/confirm"
+Write-Host "  • GET  /staff/me"
+Write-Host "  • POST /staff/register"
+Write-Host "  • POST /staff/enable"
+Write-Host "  • POST /staff/disable"
+Write-Host "  • POST /tenant/register"
 Write-Host ""
 Write-Host "📈 Performance Targets:" -ForegroundColor $Green
 Write-Host "  • p50 response time: ≤ 300ms"

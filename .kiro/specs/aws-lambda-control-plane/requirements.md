@@ -104,15 +104,16 @@ The AWS Lambda Control Plane API is a serverless "control plane" for an ERP prov
 
 ### Requirement 8
 
-**User Story:** As a system architect, I want a single Lambda function with internal routing and bundled dependencies, so that the system is portable between Lambda and App Runner while maintaining optimal performance and simplified deployment.
+**User Story:** As a system architect, I want a single Lambda function with internal routing and bundled dependencies deployed behind HTTP API Gateway, so that the system is portable between Lambda and App Runner while maintaining optimal performance and simplified deployment.
 
 #### Acceptance Criteria
 
 1. WHEN implementing the API, THE Control_Plane_API SHALL use a single Lambda function with Node.js-based internal routing for all endpoints
 2. WHEN routing requests, THE Internal_Router SHALL handle all API endpoints within the single function without external dependencies
 3. WHEN packaging dependencies, THE Control_Plane_API SHALL use esbuild to bundle all dependencies into the single function for optimal performance
-4. WHEN deploying the function, THE Control_Plane_API SHALL support deployment to both AWS Lambda and AWS App Runner without code changes
-5. WHEN adding new endpoints, THE Control_Plane_API SHALL extend the internal routing system while maintaining the single-function architecture
+4. WHEN deploying the function, THE Control_Plane_API SHALL use HTTP API Gateway (not REST API Gateway) with proxy integration to route all requests to the single Lambda function
+5. WHEN handling HTTP API Gateway events, THE Control_Plane_API SHALL support the HTTP API Gateway event format with `event.requestContext.http.method` and `event.rawPath` properties
+6. WHEN adding new endpoints, THE Control_Plane_API SHALL extend the internal routing system while maintaining the single-function architecture
 
 ### Requirement 9
 

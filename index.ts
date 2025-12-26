@@ -47,10 +47,13 @@ export const handler = async (
     const routerInstance = initializeRouter();
 
     // Add request correlation ID for tracing
-    const correlationId = event.requestContext.requestId;
+    const correlationId = event.requestContext?.requestId || 'unknown';
+    const method = event.httpMethod || (event as any).requestContext?.http?.method || 'UNKNOWN';
+    const path = event.path || (event as any).rawPath || '/';
+    
     logger.info('Processing request', { 
-      method: event.httpMethod,
-      path: event.path,
+      method,
+      path,
       correlationId,
       coldStart: !router // Log if this is a cold start
     });
@@ -67,7 +70,7 @@ export const handler = async (
 
   } catch (error) {
     // Global error handler for unhandled exceptions
-    const correlationId = event.requestContext.requestId;
+    const correlationId = event.requestContext?.requestId || 'unknown';
     logger.error('Unhandled error in Lambda handler', { 
       error: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
