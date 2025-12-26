@@ -104,6 +104,12 @@ custom:
     installExtraArgs: ['--frozen-lockfile']
     keepOutputDirectory: true
     exclude: []
+    # Bundle all dependencies into the single function
+    bundleNodeModules: true
+    # Optimize for Lambda cold starts
+    treeShaking: true
+    # Include all AWS SDK v3 clients
+    bundleExternalDependencies: true
     watch:
       pattern: ['**/*.ts', '**/*.js']
       ignore: ['node_modules/**', 'dist/**', '.serverless/**', 'tests/**']

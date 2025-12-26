@@ -1,16 +1,16 @@
 // Configuration management with environment variable validation
 import { z } from 'zod';
 
-// Configuration schema with validation
-const configSchema = z.object({
+// Environment variables schema with validation
+const envSchema = z.object({
   // AWS Configuration
   AWS_REGION: z.string().default('us-east-1'),
   STAGE: z.string().default('dev'),
   
   // DynamoDB Table Names
-  STAFF_TABLE: z.string().optional(),
-  PASSWORD_RESET_TOKENS_TABLE: z.string().optional(),
-  TENANTS_TABLE: z.string().optional(),
+  DYNAMODB_STAFF_TABLE: z.string().optional(),
+  DYNAMODB_PASSWORD_RESET_TOKENS_TABLE: z.string().optional(),
+  DYNAMODB_TENANTS_TABLE: z.string().optional(),
   
   // JWT Configuration
   JWT_SECRET: z.string().min(32, 'JWT secret must be at least 32 characters long'),
@@ -22,6 +22,9 @@ const configSchema = z.object({
   
   // CORS Configuration
   CORS_ORIGINS: z.string().optional(),
+  
+  // App Configuration
+  APP_BASE_URL: z.string().optional(),
   
   // Logging Configuration
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
@@ -36,34 +39,99 @@ const configSchema = z.object({
   REQUEST_TIMEOUT: z.string().transform(val => parseInt(val, 10)).default('30000')
 });
 
-export type Config = z.infer<typeof configSchema>;
+// Structured configuration interface
+export interface AppConfig {
+  aws: {
+    region: string;
+  };
+  stage: string;
+  dynamodb: {
+    staffTable: string;
+    passwordResetTokensTable: string;
+    tenantsTable: string;
+  };
+  jwt: {
+    secret: string;
+    expiry: string;
+  };
+  ses: {
+    fromEmail: string;
+    region: string;
+  };
+  cors: {
+    origins: string[];
+  };
+  app: {
+    baseUrl: string;
+  };
+  logging: {
+    level: string;
+    enableXray: boolean;
+  };
+  security: {
+    bcryptRounds: number;
+    passwordResetTokenExpiryHours: number;
+  };
+  performance: {
+    connectionTimeout: number;
+    requestTimeout: number;
+  };
+}
 
 // Global configuration instance
-let config: Config | null = null;
+let config: AppConfig | null = null;
 
 /**
  * Load and validate configuration from environment variables
  * Throws an error if required configuration is missing or invalid
  */
-export function loadConfig(): Config {
+export function loadConfig(): AppConfig {
   if (config) {
     return config;
   }
 
   try {
     // Parse and validate environment variables
-    config = configSchema.parse(process.env);
+    const env = envSchema.parse(process.env);
     
-    // Generate table names if not provided
-    if (!config.STAFF_TABLE) {
-      config.STAFF_TABLE = `Staff-${config.STAGE}`;
-    }
-    if (!config.PASSWORD_RESET_TOKENS_TABLE) {
-      config.PASSWORD_RESET_TOKENS_TABLE = `PasswordResetTokens-${config.STAGE}`;
-    }
-    if (!config.TENANTS_TABLE) {
-      config.TENANTS_TABLE = `Tenants-${config.STAGE}`;
-    }
+    // Transform to structured configuration
+    config = {
+      aws: {
+        region: env.AWS_REGION,
+      },
+      stage: env.STAGE,
+      dynamodb: {
+        staffTable: env.DYNAMODB_STAFF_TABLE || `Staff-${env.STAGE}`,
+        passwordResetTokensTable: env.DYNAMODB_PASSWORD_RESET_TOKENS_TABLE || `PasswordResetTokens-${env.STAGE}`,
+        tenantsTable: env.DYNAMODB_TENANTS_TABLE || `Tenants-${env.STAGE}`,
+      },
+      jwt: {
+        secret: env.JWT_SECRET,
+        expiry: env.JWT_EXPIRY,
+      },
+      ses: {
+        fromEmail: env.SES_FROM_EMAIL || `noreply@${env.STAGE === 'prod' ? 'example.com' : 'dev.example.com'}`,
+        region: env.SES_REGION,
+      },
+      cors: {
+        origins: env.CORS_ORIGINS ? env.CORS_ORIGINS.split(',').map(origin => origin.trim()) : (env.STAGE === 'prod' ? [] : ['*']),
+      },
+      app: {
+        baseUrl: env.APP_BASE_URL || `https://${env.STAGE === 'prod' ? 'app.example.com' : `${env.STAGE}.example.com`}`,
+      },
+      logging: {
+        level: env.LOG_LEVEL,
+        enableXray: env.ENABLE_XRAY,
+      },
+      security: {
+        bcryptRounds: env.BCRYPT_ROUNDS,
+        passwordResetTokenExpiryHours: env.PASSWORD_RESET_TOKEN_EXPIRY_HOURS,
+      },
+      performance: {
+        connectionTimeout: env.CONNECTION_TIMEOUT,
+        requestTimeout: env.REQUEST_TIMEOUT,
+      },
+    };
     
     return config;
   } catch (error) {
@@ -78,7 +146,7 @@ export function loadConfig(): Config {
 /**
  * Get current configuration (loads if not already loaded)
  */
-export function getConfig(): Config {
+export function getConfig(): AppConfig {
   return loadConfig();
 }
 
@@ -95,21 +163,26 @@ export function resetConfig(): void {
 export function validateRequiredConfig(): void {
   const cfg = getConfig();
   
-  const requiredForProduction = [
-    'SES_FROM_EMAIL',
-    'CORS_ORIGINS',
-    'JWT_SECRET'
-  ];
-  
-  if (cfg.STAGE === 'prod') {
-    const missing = requiredForProduction.filter(key => !cfg[key as keyof Config]);
+  if (cfg.stage === 'prod') {
+    const missing: string[] = [];
+    
+    if (!cfg.ses.fromEmail.includes('@')) {
+      missing.push('SES_FROM_EMAIL');
+    }
+    if (cfg.cors.origins.length === 0) {
+      missing.push('CORS_ORIGINS');
+    }
+    if (!cfg.jwt.secret) {
+      missing.push('JWT_SECRET');
+    }
+    
     if (missing.length > 0) {
       throw new Error(`Missing required production configuration: ${missing.join(', ')}`);
     }
   }
   
   // Validate JWT secret length in all environments
-  if (cfg.JWT_SECRET.length < 32) {
+  if (cfg.jwt.secret.length < 32) {
     throw new Error('JWT_SECRET must be at least 32 characters long for security');
   }
 }
@@ -119,26 +192,21 @@ export function validateRequiredConfig(): void {
  */
 export function getCorsOrigins(): string[] {
   const cfg = getConfig();
-  
-  if (!cfg.CORS_ORIGINS) {
-    return cfg.STAGE === 'prod' ? [] : ['*'];
-  }
-  
-  return cfg.CORS_ORIGINS.split(',').map(origin => origin.trim());
+  return cfg.cors.origins;
 }
 
 /**
  * Check if we're running in production
  */
 export function isProduction(): boolean {
-  return getConfig().STAGE === 'prod';
+  return getConfig().stage === 'prod';
 }
 
 /**
  * Check if we're running in development
  */
 export function isDevelopment(): boolean {
-  return getConfig().STAGE === 'dev';
+  return getConfig().stage === 'dev';
 }
 
 /**
@@ -147,13 +215,13 @@ export function isDevelopment(): boolean {
 export function getJwtSecret(): string {
   const cfg = getConfig();
   
-  if (!cfg.JWT_SECRET) {
+  if (!cfg.jwt.secret) {
     throw new Error('JWT_SECRET environment variable is required');
   }
   
-  if (cfg.JWT_SECRET.length < 32) {
+  if (cfg.jwt.secret.length < 32) {
     throw new Error('JWT_SECRET must be at least 32 characters long for security');
   }
   
-  return cfg.JWT_SECRET;
+  return cfg.jwt.secret;
 }

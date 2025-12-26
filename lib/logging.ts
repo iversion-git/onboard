@@ -239,7 +239,7 @@ export function getLogger(): Logger {
   if (!globalLogger) {
     const config = getConfig();
     globalLogger = new Logger(
-      config.LOG_LEVEL as LogLevel,
+      config.logging.level as LogLevel,
       true // Always enable console output in Lambda
     );
   }
@@ -493,3 +493,14 @@ export function createPerformanceLogger(): PerformanceLogger {
 export function createAuditLogger(): AuditLogger {
   return new AuditLogger();
 }
+
+/**
+ * Default logger instance for convenience (lazy initialization)
+ */
+export const logger = {
+  debug: (message: string, metadata?: Record<string, any>) => getLogger().debug(message, metadata),
+  info: (message: string, metadata?: Record<string, any>) => getLogger().info(message, metadata),
+  warn: (message: string, metadata?: Record<string, any>) => getLogger().warn(message, metadata),
+  error: (message: string, error?: Error | unknown, metadata?: Record<string, any>) => 
+    getLogger().error(message, error, metadata)
+};

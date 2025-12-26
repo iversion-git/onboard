@@ -23,7 +23,7 @@ describe('Configuration Management', () => {
       process.env['JWT_SECRET'] = 'this-is-a-very-long-secret-key-for-testing-purposes-123456';
       
       const config = loadConfig();
-      expect(config.JWT_SECRET).toBe('this-is-a-very-long-secret-key-for-testing-purposes-123456');
+      expect(config.jwt.secret).toBe('this-is-a-very-long-secret-key-for-testing-purposes-123456');
     });
 
     it('should validate JWT secret minimum length', () => {
@@ -83,10 +83,10 @@ describe('Configuration Management', () => {
       process.env['JWT_SECRET'] = 'this-is-a-very-long-secret-key-for-testing-purposes-123456';
       
       const config = loadConfig();
-      expect(config.STAGE).toBe('dev');
-      expect(config.JWT_EXPIRY).toBe('24h');
-      expect(config.LOG_LEVEL).toBe('info');
-      expect(config.BCRYPT_ROUNDS).toBe(12);
+      expect(config.stage).toBe('dev');
+      expect(config.jwt.expiry).toBe('24h');
+      expect(config.logging.level).toBe('info');
+      expect(config.security.bcryptRounds).toBe(12);
     });
 
     it('should auto-generate table names based on stage', () => {
@@ -94,9 +94,9 @@ describe('Configuration Management', () => {
       process.env['STAGE'] = 'test';
       
       const config = loadConfig();
-      expect(config.STAFF_TABLE).toBe('Staff-test');
-      expect(config.PASSWORD_RESET_TOKENS_TABLE).toBe('PasswordResetTokens-test');
-      expect(config.TENANTS_TABLE).toBe('Tenants-test');
+      expect(config.dynamodb.staffTable).toBe('Staff-test');
+      expect(config.dynamodb.passwordResetTokensTable).toBe('PasswordResetTokens-test');
+      expect(config.dynamodb.tenantsTable).toBe('Tenants-test');
     });
   });
 });

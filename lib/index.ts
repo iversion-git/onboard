@@ -9,6 +9,32 @@ export * from './response.js';
 export * from './router.js';
 export * from './setup.js';
 
+// AWS Integrations and bundled dependencies (selective exports to avoid conflicts)
+export { 
+  getDynamoDBClient, 
+  getTableNames, 
+  DynamoDBHelper, 
+  dynamoDBHelper,
+  getSESClient,
+  SESHelper,
+  sesHelper,
+  emailTemplates,
+  JWTHelper,
+  jwtHelper,
+  hasRole,
+  hasAnyRole,
+  hasAllRoles,
+  hasMinimumRole,
+  PasswordHelper,
+  passwordHelper,
+  initializeAWSIntegrations,
+  healthCheckAWSIntegrations,
+  type EmailTemplate,
+  type PasswordResetEmailData,
+  type JWTTokenPayload,
+  type AppConfig
+} from './aws-integrations.js';
+
 // Convenience re-exports for common patterns
 export { getLogger, log, createRequestLogger, createAuditLogger } from './logging.js';
 export { loadConfig, getConfig, getCorsOrigins, getJwtSecret } from './config.js';
