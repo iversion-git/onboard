@@ -20,12 +20,17 @@ graph TB
     AuthMiddleware --> AuthHandlers[Auth Route Handlers]
     AuthMiddleware --> StaffHandlers[Staff Route Handlers]
     AuthMiddleware --> TenantHandlers[Tenant Route Handlers]
+    AuthMiddleware --> ClusterHandlers[Cluster Route Handlers]
     
     AuthHandlers --> DDB[(DynamoDB Tables)]
     StaffHandlers --> DDB
     TenantHandlers --> DDB
+    ClusterHandlers --> DDB
     
     AuthHandlers --> SES[Amazon SES]
+    ClusterHandlers --> CFN[CloudFormation]
+    ClusterHandlers --> S3[S3 Templates]
+    ClusterHandlers --> CrossAccount[Cross-Account IAM Roles]
     
     SingleLambda -.-> LibUtils[lib/ utilities - bundled]
     SingleLambda -.-> BundledDeps[All Dependencies - bundled with esbuild]
@@ -37,7 +42,7 @@ graph TB
 **Internal Routing System**
 - Express.js-like routing within the single Lambda function
 - Middleware pipeline for authentication, authorization, and request processing
-- Route handlers organized by domain (auth, staff, tenant)
+- Route handlers organized by domain (auth, staff, tenant, cluster)
 - Centralized error handling and response formatting
 - Request correlation and structured logging throughout the pipeline
 
@@ -46,6 +51,32 @@ graph TB
 - Same codebase can run on AWS App Runner as a containerized web server
 - Internal routing handles all endpoint logic regardless of deployment target
 - Environment-specific configuration for Lambda vs App Runner differences
+
+### Cluster Management Architecture
+
+**Infrastructure Template Management**
+- S3-based storage for CloudFormation templates with versioning
+- Separate templates for dedicated and shared cluster types
+- Template validation and security scanning before deployment
+- Cross-account template access with proper IAM controls
+
+**Cross-Account Deployment**
+- IAM role assumption for multi-account infrastructure deployment
+- Least-privilege CloudFormation permissions per target account
+- Secure credential management and audit logging
+- Account validation and authorization checks
+
+**CIDR Management and Validation**
+- Network CIDR uniqueness validation across all clusters
+- Overlap detection using IP address range calculations
+- Private IP range enforcement (RFC 1918 compliance)
+- Regional CIDR allocation tracking
+
+**Deployment Status Tracking**
+- Real-time CloudFormation stack status monitoring
+- Deployment progress tracking with detailed error reporting
+- Stack output capture for resource information
+- Automated rollback capabilities on deployment failures
 
 ### Bundled Dependencies Strategy
 
@@ -123,6 +154,12 @@ graph TB
 
 **Tenant Domain (`handlers/tenant/`)**
 - `register.ts` - POST /tenant/register (admin/manager only)
+
+**Cluster Management Domain (`handlers/cluster/`)**
+- `list.ts` - GET /clusters (admin only)
+- `create.ts` - POST /clusters (admin only)
+- `deploy.ts` - POST /clusters/{id}/deploy (admin only)
+- `status.ts` - GET /clusters/{id}/status (admin only)
 
 ### Shared Core Interfaces
 
@@ -227,6 +264,24 @@ interface TenantRecord {
 }
 ```
 
+**Clusters Table (`Clusters-{stage}`)**
+```typescript
+interface ClusterRecord {
+  cluster_id: string;         // PK
+  name: string;
+  type: 'dedicated' | 'shared';
+  region: string;             // AWS region
+  cidr: string;               // Network CIDR block
+  status: 'created' | 'deploying' | 'deployed' | 'failed';
+  deployment_status?: string; // CloudFormation stack status
+  deployment_id?: string;     // CloudFormation stack ARN
+  stack_outputs?: Record<string, any>; // CloudFormation outputs
+  created_at: string;
+  updated_at: string;
+  deployed_at?: string;       // When deployment completed
+}
+```
+
 ### JWT Token Structure
 
 ```typescript
@@ -301,6 +356,14 @@ The following properties provide unique validation value and will be implemented
 **Property 11: Single function architecture compliance**
 *For any* new endpoint or functionality, it should be implemented within the single function using the internal routing system without external dependencies
 **Validates: Requirements 8.1, 8.2, 8.5**
+
+**Property 12: CIDR uniqueness and validation**
+*For any* cluster creation or update, CIDR blocks should be validated for proper format and checked for uniqueness/overlap with existing clusters
+**Validates: Requirements 11.2, 12.3**
+
+**Property 13: Cross-account security**
+*For any* cross-account deployment operation, proper IAM role assumption and least-privilege access should be enforced with audit logging
+**Validates: Requirements 13.2, 13.4, 13.5**
 
 ## Error Handling
 

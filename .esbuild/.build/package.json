@@ -1,0 +1,10 @@
+{
+  "name": "aws-lambda-control-plane",
+  "version": "1.0.0",
+  "description": "Packaged externals for aws-lambda-control-plane",
+  "private": true,
+  "scripts": {},
+  "dependencies": {
+    "bcrypt": "^5.1.1"
+  }
+}

@@ -1,22 +1,28 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, DeleteCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, DeleteCommand, QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { getConfig } from './config.js';
 import { logger } from './logging.js';
 import type { 
   StaffRecord, 
   PasswordResetToken, 
   TenantRecord,
+  ClusterRecord,
   StaffUpdate,
   TenantUpdate,
+  ClusterUpdate,
   DatabaseOperationResult,
   StaffQueryResult,
   TenantQueryResult,
-  PasswordResetTokenQueryResult
+  ClusterQueryResult,
+  PasswordResetTokenQueryResult,
+  CIDRValidationResult
 } from './data-models.js';
 import {
   StaffRecordSchema,
   PasswordResetTokenSchema,
-  TenantRecordSchema
+  TenantRecordSchema,
+  ClusterRecordSchema,
+  validateCIDRWithOverlapCheck
 } from './data-models.js';
 import { createApiError } from './errors.js';
 import { randomUUID } from 'crypto';
@@ -66,6 +72,7 @@ export const getTableNames = () => {
     staff: config.dynamodb.staffTable,
     passwordResetTokens: config.dynamodb.passwordResetTokensTable,
     tenants: config.dynamodb.tenantsTable,
+    clusters: config.dynamodb.clustersTable,
   };
 };
 
@@ -730,6 +737,208 @@ export class DynamoDBHelper {
       throw error;
     }
   }
+
+  // Cluster data access methods with CIDR validation
+  async getCluster(clusterId: string, correlationId?: string): Promise<ClusterQueryResult> {
+    try {
+      const item = await this.getItem(this.tables.clusters, { cluster_id: clusterId }, correlationId);
+      
+      if (!item) {
+        return { found: false };
+      }
+
+      const validationResult = ClusterRecordSchema.safeParse(item);
+      if (!validationResult.success) {
+        logger.error('Invalid cluster record format in database', { 
+          clusterId, 
+          errors: validationResult.error.errors,
+          correlationId 
+        });
+        throw createApiError('InternalError', 'Invalid cluster record format');
+      }
+
+      return { cluster: validationResult.data, found: true };
+    } catch (error) {
+      logger.error('Failed to get cluster', { 
+        clusterId, 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        correlationId 
+      });
+      throw error;
+    }
+  }
+
+  async getAllClusters(correlationId?: string): Promise<ClusterRecord[]> {
+    try {
+      logger.info('DynamoDB Scan operation for all clusters', { 
+        tableName: this.tables.clusters,
+        correlationId 
+      });
+
+      // Use scan to get all clusters - in production, consider pagination
+      const scanCommand = new ScanCommand({
+        TableName: this.tables.clusters,
+      });
+
+      const result = await this.client.send(scanCommand);
+      
+      logger.info('DynamoDB Scan completed', { 
+        tableName: this.tables.clusters,
+        itemCount: result.Items?.length || 0,
+        correlationId 
+      });
+
+      if (!result.Items) {
+        return [];
+      }
+
+      // Validate all cluster records
+      const validClusters: ClusterRecord[] = [];
+      for (const item of result.Items) {
+        const validationResult = ClusterRecordSchema.safeParse(item);
+        if (validationResult.success) {
+          validClusters.push(validationResult.data);
+        } else {
+          logger.warn('Invalid cluster record found during scan', { 
+            item: Object.keys(item),
+            errors: validationResult.error.errors,
+            correlationId 
+          });
+        }
+      }
+
+      return validClusters;
+    } catch (error) {
+      logger.error('Failed to get all clusters', { 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        correlationId 
+      });
+      throw error;
+    }
+  }
+
+  async createCluster(clusterData: Omit<ClusterRecord, 'cluster_id' | 'created_at' | 'updated_at'>, correlationId?: string): Promise<DatabaseOperationResult<ClusterRecord>> {
+    try {
+      // First, get all existing clusters to check for CIDR overlaps
+      const existingClusters = await this.getAllClusters(correlationId);
+      const existingCidrs = existingClusters.map(cluster => cluster.cidr);
+
+      // Validate CIDR and check for overlaps
+      const cidrValidation = validateCIDRWithOverlapCheck(clusterData.cidr, existingCidrs);
+      if (!cidrValidation.valid) {
+        logger.warn('CIDR validation failed for new cluster', { 
+          cidr: clusterData.cidr,
+          error: cidrValidation.error,
+          overlaps: cidrValidation.overlaps,
+          correlationId 
+        });
+        throw createApiError('Conflict', cidrValidation.error || 'CIDR validation failed');
+      }
+
+      const now = new Date().toISOString();
+      const clusterRecord: ClusterRecord = {
+        cluster_id: randomUUID(),
+        ...clusterData,
+        status: 'created',
+        created_at: now,
+        updated_at: now,
+      };
+
+      // Validate the record before saving
+      const validationResult = ClusterRecordSchema.safeParse(clusterRecord);
+      if (!validationResult.success) {
+        logger.error('Invalid cluster record data', { 
+          errors: validationResult.error.errors,
+          correlationId 
+        });
+        throw createApiError('ValidationError', 'Invalid cluster record data');
+      }
+
+      await this.putItem(this.tables.clusters, validationResult.data, correlationId);
+      
+      return { 
+        success: true, 
+        data: validationResult.data,
+        correlationId 
+      };
+    } catch (error) {
+      logger.error('Failed to create cluster', { 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        correlationId 
+      });
+      
+      if (error instanceof Error && (error.message.includes('overlap') || error.message.includes('CIDR'))) {
+        return { 
+          success: false, 
+          error: error.message,
+          correlationId 
+        };
+      }
+      
+      throw error;
+    }
+  }
+
+  async updateCluster(clusterId: string, updates: ClusterUpdate, correlationId?: string): Promise<DatabaseOperationResult<ClusterRecord>> {
+    try {
+      // Add updated_at timestamp
+      const updatesWithTimestamp = {
+        ...updates,
+        updated_at: new Date().toISOString(),
+      };
+
+      const updateExpression = 'SET ' + Object.keys(updatesWithTimestamp).map((key, index) => `#${key} = :val${index}`).join(', ');
+      const expressionAttributeNames = Object.keys(updatesWithTimestamp).reduce((acc, key) => {
+        acc[`#${key}`] = key;
+        return acc;
+      }, {} as Record<string, string>);
+      const expressionAttributeValues = Object.keys(updatesWithTimestamp).reduce((acc, key, index) => {
+        acc[`:val${index}`] = updatesWithTimestamp[key as keyof typeof updatesWithTimestamp];
+        return acc;
+      }, {} as Record<string, any>);
+
+      const result = await this.updateItem(
+        this.tables.clusters,
+        { cluster_id: clusterId },
+        updateExpression,
+        expressionAttributeValues,
+        expressionAttributeNames,
+        correlationId
+      );
+
+      if (!result) {
+        throw createApiError('NotFound', 'Cluster not found');
+      }
+
+      // Validate the updated record
+      const validationResult = ClusterRecordSchema.safeParse(result);
+      if (!validationResult.success) {
+        logger.error('Invalid cluster record after update', { 
+          clusterId, 
+          errors: validationResult.error.errors,
+          correlationId 
+        });
+        throw createApiError('InternalError', 'Invalid cluster record after update');
+      }
+
+      return { 
+        success: true, 
+        data: validationResult.data,
+        correlationId 
+      };
+    } catch (error) {
+      logger.error('Failed to update cluster', { 
+        clusterId, 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        correlationId 
+      });
+      throw error;
+    }
+  }
+
+  async deleteCluster(clusterId: string, correlationId?: string): Promise<void> {
+    return this.deleteItem(this.tables.clusters, { cluster_id: clusterId }, correlationId);
+  }
 }
 
 // Export singleton instance (lazy initialization)
@@ -783,4 +992,16 @@ export const dynamoDBHelper = {
     dynamoDBHelper.instance.createTenant(tenantData, correlationId),
   updateTenant: (tenantId: string, updates: TenantUpdate, correlationId?: string) => 
     dynamoDBHelper.instance.updateTenant(tenantId, updates, correlationId),
+
+  // Cluster methods
+  getCluster: (clusterId: string, correlationId?: string) => 
+    dynamoDBHelper.instance.getCluster(clusterId, correlationId),
+  getAllClusters: (correlationId?: string) => 
+    dynamoDBHelper.instance.getAllClusters(correlationId),
+  createCluster: (clusterData: Omit<ClusterRecord, 'cluster_id' | 'created_at' | 'updated_at'>, correlationId?: string) => 
+    dynamoDBHelper.instance.createCluster(clusterData, correlationId),
+  updateCluster: (clusterId: string, updates: ClusterUpdate, correlationId?: string) => 
+    dynamoDBHelper.instance.updateCluster(clusterId, updates, correlationId),
+  deleteCluster: (clusterId: string, correlationId?: string) => 
+    dynamoDBHelper.instance.deleteCluster(clusterId, correlationId),
 };

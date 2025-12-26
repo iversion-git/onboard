@@ -10,7 +10,7 @@
 export { getDynamoDBClient, getTableNames, DynamoDBHelper, dynamoDBHelper } from './dynamodb.js';
 export { getSESClient, SESHelper, sesHelper, emailTemplates, type EmailTemplate, type PasswordResetEmailData } from './ses.js';
 export { JWTHelper, jwtHelper, hasRole, hasAnyRole, hasAllRoles, hasMinimumRole, type JWTTokenPayload } from './jwt.js';
-export { PasswordHelper, passwordHelper } from './password.js';
+export { hashPassword, verifyPassword, validatePasswordStrength, generateSecurePassword } from './password.js';
 export { getConfig, loadConfig, resetConfig, validateRequiredConfig, getCorsOrigins, isProduction, isDevelopment, getJwtSecret, type AppConfig } from './config.js';
 export { logger } from './logging.js';
 

@@ -139,21 +139,58 @@ This implementation plan converts the AWS Lambda Control Plane API from a multi-
   - **Property 10: Observability consistency**
   - **Validates: Requirements 7.2, 10.3, 10.4**
 
-- [ ] 14. Set up observability and monitoring within single function
+- [x] 14. Implement cluster data models and validation
+  - Create Clusters table schema with CIDR uniqueness validation
+  - Implement cluster data access layer with CIDR overlap detection
+  - Build cluster validation schemas with AWS region validation
+  - Set up cluster status tracking (created, deploying, deployed, failed)
+  - _Requirements: 11.1, 11.2, 12.3, 12.4_
+
+- [ ] 15. Set up CloudFormation integration and S3 template management
+  - Configure AWS CloudFormation client for cross-account deployments
+  - Implement S3 integration for infrastructure template storage and retrieval
+  - Create template versioning and management system
+  - Set up cross-account IAM role assumption for deployments
+  - _Requirements: 11.3, 11.5, 12.1, 12.2, 13.1, 13.2_
+
+- [ ] 16. Implement cluster management route handlers
+  - Create GET /clusters handler with admin-only access for cluster listing
+  - Build POST /clusters handler with cluster creation and CIDR validation
+  - Implement POST /clusters/{id}/deploy handler for infrastructure deployment
+  - Create GET /clusters/{id}/status handler for deployment status checking
+  - Register cluster management routes with the internal router
+  - _Requirements: 11.1, 11.2, 11.3, 11.4_
+
+- [ ]* 16.1 Write property test for CIDR validation
+  - **Property 12: CIDR uniqueness and validation**
+  - **Validates: Requirements 11.2, 12.3**
+
+- [ ]* 16.2 Write property test for cross-account deployment security
+  - **Property 13: Cross-account security**
+  - **Validates: Requirements 13.2, 13.4, 13.5**
+
+- [ ] 17. Configure cross-account IAM roles and permissions
+  - Set up cross-account IAM role creation in target AWS accounts
+  - Configure least-privilege CloudFormation deployment permissions
+  - Implement secure role assumption with account validation
+  - Set up audit logging for cross-account operations
+  - _Requirements: 13.1, 13.2, 13.3, 13.4, 13.5_
+
+- [ ] 18. Set up observability and monitoring within single function
   - Configure AWS Lambda Powertools for structured logging, tracing, and metrics
   - Implement correlation ID generation and request tracking throughout the routing pipeline
   - Set up AWS X-Ray tracing within the single function
   - Configure performance monitoring and alerting for the single function
   - _Requirements: 7.2, 7.4, 10.3, 10.4_
 
-- [ ] 15. Implement security hardening for single function
+- [ ] 19. Implement security hardening for single function
   - Configure API Gateway throttling and CORS policies
   - Set up input validation with Zod schemas for all route handlers
   - Implement least-privilege IAM roles for the single function
   - Configure environment variable security for JWT secrets
   - _Requirements: 9.1, 9.4, 9.5, 9.6_
 
-- [ ] 16. Final checkpoint - Ensure all tests pass
+- [ ] 20. Final checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes

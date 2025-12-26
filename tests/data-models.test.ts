@@ -3,19 +3,26 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { 
   StaffRecord,
   PasswordResetToken,
-  TenantRecord
+  TenantRecord,
+  ClusterRecord
 } from '../lib/data-models.js';
 import { 
   StaffRecordSchema,
   PasswordResetTokenSchema,
   TenantRecordSchema,
+  ClusterRecordSchema,
   CreateStaffSchema,
+  CreateClusterSchema,
   LoginSchema,
   PasswordResetRequestSchema,
   PasswordResetConfirmSchema,
   isStaffRecord,
   isPasswordResetToken,
-  isTenantRecord
+  isTenantRecord,
+  isClusterRecord,
+  checkCIDROverlap,
+  validateCIDRWithOverlapCheck,
+  AWS_REGIONS
 } from '../lib/data-models.js';
 import { DynamoDBHelper } from '../lib/dynamodb.js';
 import { resetConfig } from '../lib/config.js';
@@ -30,6 +37,7 @@ describe('Data Models', () => {
     process.env['DYNAMODB_STAFF_TABLE'] = 'Staff-test';
     process.env['DYNAMODB_PASSWORD_RESET_TOKENS_TABLE'] = 'PasswordResetTokens-test';
     process.env['DYNAMODB_TENANTS_TABLE'] = 'Tenants-test';
+    process.env['DYNAMODB_CLUSTERS_TABLE'] = 'Clusters-test';
   });
 
   afterEach(() => {
@@ -201,6 +209,124 @@ describe('Data Models', () => {
         expect(result.success).toBe(false);
       });
     });
+
+    describe('ClusterRecord Schema', () => {
+      it('should validate valid cluster record', () => {
+        const validCluster: ClusterRecord = {
+          cluster_id: '123e4567-e89b-12d3-a456-426614174000',
+          name: 'Test Cluster',
+          type: 'dedicated',
+          region: 'us-east-1',
+          cidr: '10.0.0.0/16',
+          status: 'created',
+          created_at: '2023-01-01T00:00:00.000Z',
+          updated_at: '2023-01-01T00:00:00.000Z'
+        };
+
+        const result = ClusterRecordSchema.safeParse(validCluster);
+        expect(result.success).toBe(true);
+      });
+
+      it('should validate cluster with deployment fields', () => {
+        const clusterWithDeployment: ClusterRecord = {
+          cluster_id: '123e4567-e89b-12d3-a456-426614174000',
+          name: 'Test Cluster',
+          type: 'shared',
+          region: 'us-west-2',
+          cidr: '172.16.0.0/12',
+          status: 'deployed',
+          deployment_status: 'CREATE_COMPLETE',
+          deployment_id: 'arn:aws:cloudformation:us-west-2:123456789012:stack/test-stack/12345',
+          stack_outputs: { VpcId: 'vpc-12345', SubnetId: 'subnet-67890' },
+          created_at: '2023-01-01T00:00:00.000Z',
+          updated_at: '2023-01-01T00:00:00.000Z',
+          deployed_at: '2023-01-01T01:00:00.000Z'
+        };
+
+        const result = ClusterRecordSchema.safeParse(clusterWithDeployment);
+        expect(result.success).toBe(true);
+      });
+
+      it('should reject invalid AWS region', () => {
+        const clusterWithInvalidRegion = {
+          cluster_id: '123e4567-e89b-12d3-a456-426614174000',
+          name: 'Test Cluster',
+          type: 'dedicated',
+          region: 'invalid-region',
+          cidr: '10.0.0.0/16',
+          status: 'created',
+          created_at: '2023-01-01T00:00:00.000Z',
+          updated_at: '2023-01-01T00:00:00.000Z'
+        };
+
+        const result = ClusterRecordSchema.safeParse(clusterWithInvalidRegion);
+        expect(result.success).toBe(false);
+      });
+
+      it('should reject invalid CIDR format', () => {
+        const clusterWithInvalidCIDR = {
+          cluster_id: '123e4567-e89b-12d3-a456-426614174000',
+          name: 'Test Cluster',
+          type: 'dedicated',
+          region: 'us-east-1',
+          cidr: 'invalid-cidr',
+          status: 'created',
+          created_at: '2023-01-01T00:00:00.000Z',
+          updated_at: '2023-01-01T00:00:00.000Z'
+        };
+
+        const result = ClusterRecordSchema.safeParse(clusterWithInvalidCIDR);
+        expect(result.success).toBe(false);
+      });
+
+      it('should reject public IP CIDR ranges', () => {
+        const clusterWithPublicCIDR = {
+          cluster_id: '123e4567-e89b-12d3-a456-426614174000',
+          name: 'Test Cluster',
+          type: 'dedicated',
+          region: 'us-east-1',
+          cidr: '8.8.8.0/24', // Public IP range
+          status: 'created',
+          created_at: '2023-01-01T00:00:00.000Z',
+          updated_at: '2023-01-01T00:00:00.000Z'
+        };
+
+        const result = ClusterRecordSchema.safeParse(clusterWithPublicCIDR);
+        expect(result.success).toBe(false);
+      });
+
+      it('should validate cluster type values', () => {
+        const clusterWithInvalidType = {
+          cluster_id: '123e4567-e89b-12d3-a456-426614174000',
+          name: 'Test Cluster',
+          type: 'invalid-type',
+          region: 'us-east-1',
+          cidr: '10.0.0.0/16',
+          status: 'created',
+          created_at: '2023-01-01T00:00:00.000Z',
+          updated_at: '2023-01-01T00:00:00.000Z'
+        };
+
+        const result = ClusterRecordSchema.safeParse(clusterWithInvalidType);
+        expect(result.success).toBe(false);
+      });
+
+      it('should validate cluster status values', () => {
+        const clusterWithInvalidStatus = {
+          cluster_id: '123e4567-e89b-12d3-a456-426614174000',
+          name: 'Test Cluster',
+          type: 'dedicated',
+          region: 'us-east-1',
+          cidr: '10.0.0.0/16',
+          status: 'invalid-status',
+          created_at: '2023-01-01T00:00:00.000Z',
+          updated_at: '2023-01-01T00:00:00.000Z'
+        };
+
+        const result = ClusterRecordSchema.safeParse(clusterWithInvalidStatus);
+        expect(result.success).toBe(false);
+      });
+    });
   });
 
   describe('Input Validation Schemas', () => {
@@ -239,6 +365,60 @@ describe('Data Models', () => {
 
         const result = CreateStaffSchema.safeParse(dataWithoutRoles);
         expect(result.success).toBe(false);
+      });
+    });
+
+    describe('CreateCluster Schema', () => {
+      it('should validate valid cluster creation data', () => {
+        const validData = {
+          name: 'Test Cluster',
+          type: 'dedicated' as const,
+          region: 'us-east-1' as const,
+          cidr: '10.0.0.0/16'
+        };
+
+        const result = CreateClusterSchema.safeParse(validData);
+        expect(result.success).toBe(true);
+      });
+
+      it('should reject invalid CIDR in cluster creation', () => {
+        const dataWithInvalidCIDR = {
+          name: 'Test Cluster',
+          type: 'dedicated' as const,
+          region: 'us-east-1' as const,
+          cidr: '8.8.8.0/24' // Public IP range
+        };
+
+        const result = CreateClusterSchema.safeParse(dataWithInvalidCIDR);
+        expect(result.success).toBe(false);
+      });
+
+      it('should reject invalid AWS region in cluster creation', () => {
+        const dataWithInvalidRegion = {
+          name: 'Test Cluster',
+          type: 'dedicated' as const,
+          region: 'invalid-region',
+          cidr: '10.0.0.0/16'
+        };
+
+        const result = CreateClusterSchema.safeParse(dataWithInvalidRegion);
+        expect(result.success).toBe(false);
+      });
+
+      it('should validate all supported AWS regions', () => {
+        const validRegions = ['us-east-1', 'us-west-2', 'eu-west-1', 'ap-southeast-1'];
+        
+        validRegions.forEach(region => {
+          const data = {
+            name: 'Test Cluster',
+            type: 'dedicated' as const,
+            region: region as any,
+            cidr: '10.0.0.0/16'
+          };
+
+          const result = CreateClusterSchema.safeParse(data);
+          expect(result.success).toBe(true);
+        });
       });
     });
 
@@ -347,6 +527,92 @@ describe('Data Models', () => {
       expect(isTenantRecord(validTenant)).toBe(true);
       expect(isTenantRecord({ invalid: 'data' })).toBe(false);
     });
+
+    it('should correctly identify valid cluster records', () => {
+      const validCluster: ClusterRecord = {
+        cluster_id: '123e4567-e89b-12d3-a456-426614174000',
+        name: 'Test Cluster',
+        type: 'dedicated',
+        region: 'us-east-1',
+        cidr: '10.0.0.0/16',
+        status: 'created',
+        created_at: '2023-01-01T00:00:00.000Z',
+        updated_at: '2023-01-01T00:00:00.000Z'
+      };
+
+      expect(isClusterRecord(validCluster)).toBe(true);
+      expect(isClusterRecord({ invalid: 'data' })).toBe(false);
+    });
+  });
+
+  describe('CIDR Validation', () => {
+    describe('checkCIDROverlap', () => {
+      it('should detect overlapping CIDR blocks', () => {
+        expect(checkCIDROverlap('10.0.0.0/16', '10.0.1.0/24')).toBe(true);
+        expect(checkCIDROverlap('192.168.1.0/24', '192.168.1.128/25')).toBe(true);
+        expect(checkCIDROverlap('172.16.0.0/12', '172.20.0.0/16')).toBe(true);
+      });
+
+      it('should not detect non-overlapping CIDR blocks', () => {
+        expect(checkCIDROverlap('10.0.0.0/16', '10.1.0.0/16')).toBe(false);
+        expect(checkCIDROverlap('192.168.1.0/24', '192.168.2.0/24')).toBe(false);
+        expect(checkCIDROverlap('172.16.0.0/16', '172.17.0.0/16')).toBe(false);
+      });
+
+      it('should handle identical CIDR blocks', () => {
+        expect(checkCIDROverlap('10.0.0.0/16', '10.0.0.0/16')).toBe(true);
+      });
+    });
+
+    describe('validateCIDRWithOverlapCheck', () => {
+      it('should validate CIDR without overlaps', () => {
+        const existingCidrs = ['10.0.0.0/16', '192.168.1.0/24'];
+        const result = validateCIDRWithOverlapCheck('172.16.0.0/16', existingCidrs);
+        
+        expect(result.valid).toBe(true);
+        expect(result.error).toBeUndefined();
+        expect(result.overlaps).toBeUndefined();
+      });
+
+      it('should reject CIDR with overlaps', () => {
+        const existingCidrs = ['10.0.0.0/16', '192.168.1.0/24'];
+        const result = validateCIDRWithOverlapCheck('10.0.1.0/24', existingCidrs);
+        
+        expect(result.valid).toBe(false);
+        expect(result.error).toBe('CIDR overlaps with existing cluster networks');
+        expect(result.overlaps).toEqual(['10.0.0.0/16']);
+      });
+
+      it('should reject invalid CIDR format', () => {
+        const existingCidrs = ['10.0.0.0/16'];
+        const result = validateCIDRWithOverlapCheck('invalid-cidr', existingCidrs);
+        
+        expect(result.valid).toBe(false);
+        expect(result.error).toBe('CIDR must be a valid private IPv4 CIDR block (RFC 1918)');
+      });
+
+      it('should reject public IP ranges', () => {
+        const existingCidrs = ['10.0.0.0/16'];
+        const result = validateCIDRWithOverlapCheck('8.8.8.0/24', existingCidrs);
+        
+        expect(result.valid).toBe(false);
+        expect(result.error).toBe('CIDR must be a valid private IPv4 CIDR block (RFC 1918)');
+      });
+    });
+
+    describe('AWS Regions', () => {
+      it('should export valid AWS regions', () => {
+        expect(AWS_REGIONS).toBeDefined();
+        expect(Array.isArray(AWS_REGIONS)).toBe(true);
+        expect(AWS_REGIONS.length).toBeGreaterThan(0);
+        
+        // Check some common regions
+        expect(AWS_REGIONS).toContain('us-east-1');
+        expect(AWS_REGIONS).toContain('us-west-2');
+        expect(AWS_REGIONS).toContain('eu-west-1');
+        expect(AWS_REGIONS).toContain('ap-southeast-1');
+      });
+    });
   });
 });
 
@@ -362,6 +628,7 @@ describe('DynamoDB Access Patterns', () => {
     process.env['DYNAMODB_STAFF_TABLE'] = 'Staff-test';
     process.env['DYNAMODB_PASSWORD_RESET_TOKENS_TABLE'] = 'PasswordResetTokens-test';
     process.env['DYNAMODB_TENANTS_TABLE'] = 'Tenants-test';
+    process.env['DYNAMODB_CLUSTERS_TABLE'] = 'Clusters-test';
     
     dynamoDBHelper = new DynamoDBHelper();
   });
@@ -392,11 +659,20 @@ describe('DynamoDB Access Patterns', () => {
       expect(typeof dynamoDBHelper.updateTenant).toBe('function');
     });
 
+    it('should have all required cluster data access methods', () => {
+      expect(typeof dynamoDBHelper.getCluster).toBe('function');
+      expect(typeof dynamoDBHelper.getAllClusters).toBe('function');
+      expect(typeof dynamoDBHelper.createCluster).toBe('function');
+      expect(typeof dynamoDBHelper.updateCluster).toBe('function');
+      expect(typeof dynamoDBHelper.deleteCluster).toBe('function');
+    });
+
     it('should have proper table name resolution', () => {
       const tables = dynamoDBHelper['tables'];
       expect(tables.staff).toBe('Staff-test');
       expect(tables.passwordResetTokens).toBe('PasswordResetTokens-test');
       expect(tables.tenants).toBe('Tenants-test');
+      expect(tables.clusters).toBe('Clusters-test');
     });
   });
 
@@ -447,6 +723,22 @@ describe('DynamoDB Access Patterns', () => {
       expect(validTokenData).toHaveProperty('expires_at');
       expect(typeof validTokenData.expires_at).toBe('number');
     });
+
+    it('should validate cluster creation data structure', () => {
+      const validClusterData = {
+        name: 'Test Cluster',
+        type: 'dedicated' as const,
+        region: 'us-east-1' as const,
+        cidr: '10.0.0.0/16'
+      };
+
+      // Test that the data structure matches expected interface
+      expect(validClusterData).toHaveProperty('name');
+      expect(validClusterData).toHaveProperty('type');
+      expect(validClusterData).toHaveProperty('region');
+      expect(validClusterData).toHaveProperty('cidr');
+      expect(['dedicated', 'shared']).toContain(validClusterData.type);
+    });
   });
 
   describe('Error Handling Structure', () => {
@@ -455,10 +747,12 @@ describe('DynamoDB Access Patterns', () => {
       expect(typeof dynamoDBHelper.createStaff).toBe('function');
       expect(typeof dynamoDBHelper.createTenant).toBe('function');
       expect(typeof dynamoDBHelper.createPasswordResetToken).toBe('function');
+      expect(typeof dynamoDBHelper.createCluster).toBe('function');
       
       // Test that update methods exist
       expect(typeof dynamoDBHelper.updateStaff).toBe('function');
       expect(typeof dynamoDBHelper.updateTenant).toBe('function');
+      expect(typeof dynamoDBHelper.updateCluster).toBe('function');
       expect(typeof dynamoDBHelper.markPasswordResetTokenUsed).toBe('function');
     });
 
@@ -469,6 +763,8 @@ describe('DynamoDB Access Patterns', () => {
       expect(dynamoDBHelper.getStaffByEmail.length).toBeGreaterThanOrEqual(1);
       expect(dynamoDBHelper.getTenant.length).toBeGreaterThanOrEqual(1);
       expect(dynamoDBHelper.getPasswordResetToken.length).toBeGreaterThanOrEqual(1);
+      expect(dynamoDBHelper.getCluster.length).toBeGreaterThanOrEqual(1);
+      expect(dynamoDBHelper.getAllClusters.length).toBeGreaterThanOrEqual(0);
     });
   });
 
@@ -494,10 +790,12 @@ describe('DynamoDB Access Patterns', () => {
       expect(isStaffRecord).toBeDefined();
       expect(isPasswordResetToken).toBeDefined();
       expect(isTenantRecord).toBeDefined();
+      expect(isClusterRecord).toBeDefined();
       
       expect(typeof isStaffRecord).toBe('function');
       expect(typeof isPasswordResetToken).toBe('function');
       expect(typeof isTenantRecord).toBe('function');
+      expect(typeof isClusterRecord).toBe('function');
     });
   });
 });

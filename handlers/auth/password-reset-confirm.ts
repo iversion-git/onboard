@@ -1,7 +1,7 @@
 // POST /auth/password-reset/confirm handler with token validation and password update
 import type { RouteHandler } from '../../lib/types.js';
 import { dynamoDBHelper } from '../../lib/dynamodb.js';
-import { passwordHelper, PasswordHelper } from '../../lib/password.js';
+import { hashPassword, validatePasswordStrength } from '../../lib/password.js';
 import { logger } from '../../lib/logging.js';
 import { sendError } from '../../lib/response.js';
 import { PasswordResetConfirmSchema } from '../../lib/data-models.js';
@@ -33,7 +33,7 @@ export const passwordResetConfirmHandler: RouteHandler = async (req, res) => {
     const { token, new_password } = validation.data;
 
     // Validate password strength
-    const passwordValidation = PasswordHelper.validatePasswordStrength(new_password);
+    const passwordValidation = validatePasswordStrength(new_password);
     if (!passwordValidation.isValid) {
       logger.warn('Password reset confirmation with weak password', {
         correlationId: req.correlationId,
@@ -140,7 +140,7 @@ export const passwordResetConfirmHandler: RouteHandler = async (req, res) => {
     }
 
     // Hash the new password
-    const newPasswordHash = await passwordHelper.hashPassword(new_password, req.correlationId);
+    const newPasswordHash = await hashPassword(new_password, req.correlationId);
 
     // Update the staff member's password
     const updateResult = await dynamoDBHelper.updateStaffPassword(

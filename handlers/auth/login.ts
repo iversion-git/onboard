@@ -1,7 +1,7 @@
 // POST /auth/login handler with credential validation and JWT generation
 import type { RouteHandler } from '../../lib/types.js';
 import { dynamoDBHelper } from '../../lib/dynamodb.js';
-import { passwordHelper } from '../../lib/password.js';
+import { verifyPassword } from '../../lib/password.js';
 import { jwtHelper } from '../../lib/jwt.js';
 import { logger } from '../../lib/logging.js';
 import { sendError } from '../../lib/response.js';
@@ -70,7 +70,7 @@ export const loginHandler: RouteHandler = async (req, res) => {
     }
 
     // Verify password
-    const isPasswordValid = await passwordHelper.verifyPassword(
+    const isPasswordValid = await verifyPassword(
       password,
       staff.password_hash,
       req.correlationId

@@ -1,7 +1,7 @@
 // POST /staff/register handler with admin-only access and account creation
 import type { RouteHandler } from '../../lib/types.js';
 import { dynamoDBHelper } from '../../lib/dynamodb.js';
-import { passwordHelper } from '../../lib/password.js';
+import { hashPassword } from '../../lib/password.js';
 import { logger } from '../../lib/logging.js';
 import { sendError } from '../../lib/response.js';
 import { CreateStaffSchema } from '../../lib/data-models.js';
@@ -34,7 +34,7 @@ export const registerHandler: RouteHandler = async (req, res) => {
     const { email, password, roles } = validation.data;
 
     // Hash the password
-    const passwordHash = await passwordHelper.hashPassword(password, req.correlationId);
+    const passwordHash = await hashPassword(password, req.correlationId);
 
     // Create staff record
     const staffData = {

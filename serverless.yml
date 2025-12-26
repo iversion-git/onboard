@@ -93,6 +93,8 @@ provider:
     SES_FROM_EMAIL: ${self:custom.config.sesFromEmail}
     # CORS origins for environment-specific configuration (Requirements 9.5)
     CORS_ORIGINS: ${self:custom.config.corsOrigins.${self:provider.stage}}
+    # Security configuration
+    BCRYPT_ROUNDS: "12"
   iam:
     role:
       statements:

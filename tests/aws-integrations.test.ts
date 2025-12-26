@@ -6,9 +6,10 @@ import {
   dynamoDBHelper,
   sesHelper,
   jwtHelper,
-  passwordHelper,
-  SESHelper,
-  PasswordHelper
+  hashPassword,
+  verifyPassword,
+  validatePasswordStrength,
+  SESHelper
 } from '../lib/aws-integrations.js';
 import { resetConfig } from '../lib/config.js';
 
@@ -64,10 +65,10 @@ describe('AWS Integrations', () => {
       expect(typeof jwtHelper.verifyToken).toBe('function');
     });
 
-    it('should provide Password helper instance', () => {
-      expect(passwordHelper).toBeDefined();
-      expect(typeof passwordHelper.hashPassword).toBe('function');
-      expect(typeof passwordHelper.verifyPassword).toBe('function');
+    it('should provide Password helper functions', () => {
+      expect(hashPassword).toBeDefined();
+      expect(typeof hashPassword).toBe('function');
+      expect(typeof verifyPassword).toBe('function');
     });
   });
 
@@ -98,14 +99,14 @@ describe('AWS Integrations', () => {
     it('should hash and verify passwords', async () => {
       const password = 'TestPassword123!';
       
-      const hash = await passwordHelper.hashPassword(password);
+      const hash = await hashPassword(password);
       expect(typeof hash).toBe('string');
       expect(hash).not.toBe(password);
 
-      const isValid = await passwordHelper.verifyPassword(password, hash);
+      const isValid = await verifyPassword(password, hash);
       expect(isValid).toBe(true);
 
-      const isInvalid = await passwordHelper.verifyPassword('wrongpassword', hash);
+      const isInvalid = await verifyPassword('wrongpassword', hash);
       expect(isInvalid).toBe(false);
     });
 
@@ -113,11 +114,11 @@ describe('AWS Integrations', () => {
       const strongPassword = 'StrongPassword123!';
       const weakPassword = 'weak';
 
-      const strongResult = PasswordHelper.validatePasswordStrength(strongPassword);
+      const strongResult = validatePasswordStrength(strongPassword);
       expect(strongResult.isValid).toBe(true);
       expect(strongResult.errors).toHaveLength(0);
 
-      const weakResult = PasswordHelper.validatePasswordStrength(weakPassword);
+      const weakResult = validatePasswordStrength(weakPassword);
       expect(weakResult.isValid).toBe(false);
       expect(weakResult.errors.length).toBeGreaterThan(0);
     });

@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "esbuild index.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist/index.mjs --sourcemap --minify",
-    "dev": "tsx watch index.ts",
+    "dev": "tsx watch dev-server.ts",
     "test": "vitest --run",
     "test:watch": "vitest",
     "test:properties": "vitest --run tests/properties/",
@@ -36,14 +36,13 @@
     "@aws-sdk/client-secrets-manager": "^3.490.0",
     "@aws-sdk/client-ses": "^3.490.0",
     "@aws-sdk/lib-dynamodb": "^3.490.0",
-    "bcryptjs": "^2.4.3",
+    "bcryptjs": "^3.0.3",
     "jose": "^5.2.0",
     "validator": "^13.11.0",
     "zod": "^3.22.4"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.131",
-    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20.11.0",
     "@types/validator": "^13.11.8",
     "@typescript-eslint/eslint-plugin": "^6.19.0",

@@ -1,80 +1,77 @@
 import bcrypt from 'bcryptjs';
-import { getConfig } from './config.js';
 import { logger } from './logging.js';
 
 /**
- * Password utility class for hashing and verification
+ * Hash a password using bcrypt
  */
-export class PasswordHelper {
-  private saltRounds: number;
+export async function hashPassword(password: string, correlationId?: string): Promise<string> {
+  try {
+    logger.info('Hashing password', { 
+      correlationId,
+      passwordType: typeof password,
+      passwordValue: password ? '[REDACTED]' : 'null/undefined'
+    });
 
-  constructor() {
-    const config = getConfig();
-    this.saltRounds = config.security.bcryptRounds;
-    logger.info('Password helper initialized', { saltRounds: this.saltRounds });
-  }
-
-  /**
-   * Hash a password using bcrypt
-   */
-  async hashPassword(password: string, correlationId?: string): Promise<string> {
-    try {
-      logger.info('Hashing password', { correlationId });
-
-      if (!password || password.length === 0) {
-        throw new Error('Password cannot be empty');
-      }
-
-      if (password.length < 8) {
-        throw new Error('Password must be at least 8 characters long');
-      }
-
-      const hash = await bcrypt.hash(password, this.saltRounds);
-      
-      logger.info('Password hashed successfully', { correlationId });
-      return hash;
-    } catch (error) {
-      logger.error('Failed to hash password', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        correlationId,
-      });
-      throw error;
+    // Ensure password is a string and convert if needed
+    const passwordStr = String(password);
+    
+    if (!passwordStr || passwordStr.length === 0) {
+      throw new Error('Password cannot be empty');
     }
+
+    if (passwordStr.length < 8) {
+      throw new Error('Password must be at least 8 characters long');
+    }
+
+    // Use hardcoded salt rounds
+    const saltRounds = 12;
+    const hash = await bcrypt.hash(passwordStr, saltRounds);
+    
+    logger.info('Password hashed successfully', { correlationId });
+    return hash;
+
+  } catch (error) {
+    logger.error('Failed to hash password', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      correlationId,
+    });
+    throw error;
   }
+}
 
-  /**
-   * Verify a password against a hash
-   */
-  async verifyPassword(password: string, hash: string, correlationId?: string): Promise<boolean> {
-    try {
-      logger.info('Verifying password', { correlationId });
+/**
+ * Verify a password against a hash
+ */
+export async function verifyPassword(password: string, hash: string, correlationId?: string): Promise<boolean> {
+  try {
+    logger.info('Verifying password', { correlationId });
 
-      if (!password || !hash) {
-        logger.info('Password verification failed: empty password or hash', { correlationId });
-        return false;
-      }
-
-      const isValid = await bcrypt.compare(password, hash);
-      
-      logger.info('Password verification completed', { 
-        isValid,
-        correlationId 
-      });
-
-      return isValid;
-    } catch (error) {
-      logger.error('Failed to verify password', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        correlationId,
-      });
+    if (!password || !hash) {
+      logger.info('Password verification failed: empty password or hash', { correlationId });
       return false;
     }
+
+    const isValid = await bcrypt.compare(password, hash);
+    
+    logger.info('Password verification completed', { 
+      isValid,
+      correlationId 
+    });
+
+    return isValid;
+  } catch (error) {
+    logger.error('Failed to verify password', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      correlationId,
+    });
+    return false;
   }
+}
 
   /**
    * Validate password strength
    */
-  static validatePasswordStrength(password: string): {
+  export function validatePasswordStrength(password: string): {
     isValid: boolean;
     errors: string[];
   } {
@@ -128,7 +125,7 @@ export class PasswordHelper {
   /**
    * Generate a secure random password
    */
-  static generateSecurePassword(length: number = 16): string {
+  export function generateSecurePassword(length: number = 16): string {
     const lowercase = 'abcdefghijklmnopqrstuvwxyz';
     const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
     const numbers = '0123456789';
@@ -152,24 +149,3 @@ export class PasswordHelper {
     // Shuffle the password
     return password.split('').sort(() => Math.random() - 0.5).join('');
   }
-}
-
-// Export singleton instance (lazy initialization)
-let passwordHelperInstance: PasswordHelper | null = null;
-export const passwordHelper = {
-  get instance(): PasswordHelper {
-    if (!passwordHelperInstance) {
-      passwordHelperInstance = new PasswordHelper();
-    }
-    return passwordHelperInstance;
-  },
-  
-  // Proxy methods for convenience
-  hashPassword: (password: string, correlationId?: string) => 
-    passwordHelper.instance.hashPassword(password, correlationId),
-  verifyPassword: (password: string, hash: string, correlationId?: string) => 
-    passwordHelper.instance.verifyPassword(password, hash, correlationId),
-  
-  // Static methods
-  constructor: PasswordHelper,
-};

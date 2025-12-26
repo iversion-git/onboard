@@ -11,6 +11,7 @@ const envSchema = z.object({
   DYNAMODB_STAFF_TABLE: z.string().optional(),
   DYNAMODB_PASSWORD_RESET_TOKENS_TABLE: z.string().optional(),
   DYNAMODB_TENANTS_TABLE: z.string().optional(),
+  DYNAMODB_CLUSTERS_TABLE: z.string().optional(),
   
   // JWT Configuration
   JWT_SECRET: z.string().min(32, 'JWT secret must be at least 32 characters long'),
@@ -49,6 +50,7 @@ export interface AppConfig {
     staffTable: string;
     passwordResetTokensTable: string;
     tenantsTable: string;
+    clustersTable: string;
   };
   jwt: {
     secret: string;
@@ -104,6 +106,7 @@ export function loadConfig(): AppConfig {
         staffTable: env.DYNAMODB_STAFF_TABLE || `Staff-${env.STAGE}`,
         passwordResetTokensTable: env.DYNAMODB_PASSWORD_RESET_TOKENS_TABLE || `PasswordResetTokens-${env.STAGE}`,
         tenantsTable: env.DYNAMODB_TENANTS_TABLE || `Tenants-${env.STAGE}`,
+        clustersTable: env.DYNAMODB_CLUSTERS_TABLE || `Clusters-${env.STAGE}`,
       },
       jwt: {
         secret: env.JWT_SECRET,

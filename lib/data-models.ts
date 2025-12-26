@@ -1,5 +1,6 @@
 // Data models for DynamoDB tables with validation schemas
 import { z } from 'zod';
+import { validateCIDR } from './cidr-utils.js';
 
 // Staff Table Data Model
 export interface StaffRecord {
@@ -36,6 +37,22 @@ export interface TenantRecord {
   updated_at: string;
 }
 
+// Clusters Table Data Model
+export interface ClusterRecord {
+  cluster_id: string;         // PK
+  name: string;
+  type: 'dedicated' | 'shared';
+  region: string;             // AWS region
+  cidr: string;               // Network CIDR block
+  status: 'created' | 'deploying' | 'deployed' | 'failed';
+  deployment_status?: string; // CloudFormation stack status
+  deployment_id?: string;     // CloudFormation stack ARN
+  stack_outputs?: Record<string, any>; // CloudFormation outputs
+  created_at: string;
+  updated_at: string;
+  deployed_at?: string;       // When deployment completed
+}
+
 // JWT Token Structure
 export interface JWTPayload {
   sub: string;                // staff_id
@@ -48,6 +65,15 @@ export interface JWTPayload {
 }
 
 // Validation schemas using Zod
+
+// AWS regions validation - comprehensive list of active regions
+const AWS_REGIONS = [
+  'us-east-1', 'us-east-2', 'us-west-1', 'us-west-2',
+  'eu-west-1', 'eu-west-2', 'eu-west-3', 'eu-central-1', 'eu-north-1', 'eu-south-1',
+  'ap-southeast-1', 'ap-southeast-2', 'ap-northeast-1', 'ap-northeast-2', 'ap-northeast-3', 'ap-south-1', 'ap-east-1',
+  'ca-central-1', 'sa-east-1', 'af-south-1', 'me-south-1'
+] as const;
+
 export const StaffRecordSchema = z.object({
   staff_id: z.string().uuid(),
   email: z.string().email().toLowerCase(),
@@ -78,6 +104,23 @@ export const TenantRecordSchema = z.object({
   status: z.enum(['pending', 'active', 'suspended']),
   created_at: z.string().datetime(),
   updated_at: z.string().datetime(),
+});
+
+export const ClusterRecordSchema = z.object({
+  cluster_id: z.string().uuid(),
+  name: z.string().min(1).max(255),
+  type: z.enum(['dedicated', 'shared']),
+  region: z.enum(AWS_REGIONS),
+  cidr: z.string().refine(validateCIDR, {
+    message: 'CIDR must be a valid private IPv4 CIDR block (RFC 1918)'
+  }),
+  status: z.enum(['created', 'deploying', 'deployed', 'failed']),
+  deployment_status: z.string().optional(),
+  deployment_id: z.string().optional(),
+  stack_outputs: z.record(z.any()).optional(),
+  created_at: z.string().datetime(),
+  updated_at: z.string().datetime(),
+  deployed_at: z.string().datetime().optional(),
 });
 
 export const JWTPayloadSchema = z.object({
@@ -112,6 +155,24 @@ export const CreateTenantSchema = z.object({
   }).optional().default({}),
 });
 
+export const CreateClusterSchema = z.object({
+  name: z.string().min(1).max(255),
+  type: z.enum(['dedicated', 'shared']),
+  region: z.enum(AWS_REGIONS),
+  cidr: z.string().refine(validateCIDR, {
+    message: 'CIDR must be a valid private IPv4 CIDR block (RFC 1918)'
+  }),
+});
+
+export const UpdateClusterSchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+  status: z.enum(['created', 'deploying', 'deployed', 'failed']).optional(),
+  deployment_status: z.string().optional(),
+  deployment_id: z.string().optional(),
+  stack_outputs: z.record(z.any()).optional(),
+  deployed_at: z.string().datetime().optional(),
+});
+
 export const LoginSchema = z.object({
   email: z.string().email().toLowerCase(),
   password: z.string().min(1),
@@ -139,6 +200,10 @@ export const isTenantRecord = (obj: any): obj is TenantRecord => {
   return TenantRecordSchema.safeParse(obj).success;
 };
 
+export const isClusterRecord = (obj: any): obj is ClusterRecord => {
+  return ClusterRecordSchema.safeParse(obj).success;
+};
+
 export const isJWTPayload = (obj: any): obj is JWTPayload => {
   return JWTPayloadSchema.safeParse(obj).success;
 };
@@ -147,6 +212,7 @@ export const isJWTPayload = (obj: any): obj is JWTPayload => {
 export type StaffUpdate = Partial<Pick<StaffRecord, 'roles' | 'enabled' | 'updated_at'>>;
 export type StaffPasswordUpdate = Partial<Pick<StaffRecord, 'password_hash' | 'updated_at'>>;
 export type TenantUpdate = Partial<Pick<TenantRecord, 'name' | 'email' | 'contact_info' | 'status' | 'updated_at'>>;
+export type ClusterUpdate = Partial<Pick<ClusterRecord, 'name' | 'status' | 'deployment_status' | 'deployment_id' | 'stack_outputs' | 'deployed_at' | 'updated_at'>>;
 
 // Database operation result types
 export interface DatabaseOperationResult<T> {
@@ -167,8 +233,36 @@ export interface TenantQueryResult {
   found: boolean;
 }
 
+export interface ClusterQueryResult {
+  cluster?: ClusterRecord;
+  found: boolean;
+}
+
 export interface PasswordResetTokenQueryResult {
   token?: PasswordResetToken;
   found: boolean;
   expired?: boolean;
 }
+
+// CIDR validation utilities
+export interface CIDRValidationResult {
+  valid: boolean;
+  error?: string;
+  overlaps?: string[];
+}
+
+export interface CIDROverlapCheck {
+  cidr: string;
+  existingCidrs: string[];
+}
+
+// Re-export CIDR utilities from cidr-utils
+export { 
+  checkCIDROverlap, 
+  validateCIDRWithOverlapCheck, 
+  getCIDRInfo, 
+  isIPInCIDR 
+} from './cidr-utils.js';
+
+// Export AWS regions for external use
+export { AWS_REGIONS };
