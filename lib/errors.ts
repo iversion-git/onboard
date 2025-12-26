@@ -174,6 +174,33 @@ export function createValidationError(
 }
 
 /**
+ * Factory function to create appropriate error instances
+ */
+export function createApiError(
+  code: ApiError,
+  message: string,
+  details?: any,
+  correlationId?: string
+): AppError {
+  switch (code) {
+    case 'ValidationError':
+      return new ValidationError(message, details, correlationId);
+    case 'Unauthorized':
+      return new UnauthorizedError(message, correlationId);
+    case 'Forbidden':
+      return new ForbiddenError(message, correlationId);
+    case 'NotFound':
+      return new NotFoundError(message, correlationId);
+    case 'Conflict':
+      return new ConflictError(message, correlationId);
+    case 'InternalError':
+      return new InternalError(message, details, correlationId);
+    default:
+      return new AppError(code, message, details, correlationId);
+  }
+}
+
+/**
  * Check if an error is a specific type of AppError
  */
 export function isAppError(error: unknown, code?: ApiError): error is AppError {

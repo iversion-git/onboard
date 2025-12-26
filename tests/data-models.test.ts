@@ -1,14 +1,15 @@
 // Data models and DynamoDB access patterns tests
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { 
+import type { 
   StaffRecord,
   PasswordResetToken,
-  TenantRecord,
+  TenantRecord
+} from '../lib/data-models.js';
+import { 
   StaffRecordSchema,
   PasswordResetTokenSchema,
   TenantRecordSchema,
   CreateStaffSchema,
-  CreateTenantSchema,
   LoginSchema,
   PasswordResetRequestSchema,
   PasswordResetConfirmSchema,

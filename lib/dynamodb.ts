@@ -2,19 +2,21 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, DeleteCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { getConfig } from './config.js';
 import { logger } from './logging.js';
-import { 
+import type { 
   StaffRecord, 
   PasswordResetToken, 
   TenantRecord,
-  StaffRecordSchema,
-  PasswordResetTokenSchema,
-  TenantRecordSchema,
   StaffUpdate,
   TenantUpdate,
   DatabaseOperationResult,
   StaffQueryResult,
   TenantQueryResult,
   PasswordResetTokenQueryResult
+} from './data-models.js';
+import {
+  StaffRecordSchema,
+  PasswordResetTokenSchema,
+  TenantRecordSchema
 } from './data-models.js';
 import { createApiError } from './errors.js';
 import { randomUUID } from 'crypto';
