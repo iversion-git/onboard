@@ -9,6 +9,9 @@
 // Re-export all AWS integrations and utilities
 export { getDynamoDBClient, getTableNames, DynamoDBHelper, dynamoDBHelper } from './dynamodb.js';
 export { getSESClient, SESHelper, sesHelper, emailTemplates, type EmailTemplate, type PasswordResetEmailData } from './ses.js';
+export { getCloudFormationHelper, getCloudFormationClient, CloudFormationHelper, isStackInProgress, isStackSuccessful, isStackFailed, STACK_STATUS_CATEGORIES, type DeploymentConfig, type CrossAccountConfig, type DeploymentResult } from './cloudformation.js';
+export { getS3TemplateManager, getS3Client, S3TemplateManager, type TemplateMetadata, type TemplateUploadConfig, type TemplateInfo, type TemplateListResult } from './s3-templates.js';
+export { getCrossAccountRoleManager, createCrossAccountRoleManager, CrossAccountRoleManager, type CrossAccountDeploymentConfig, type AccountValidationConfig, type CrossAccountSession } from './cross-account-roles.js';
 export { JWTHelper, jwtHelper, hasRole, hasAnyRole, hasAllRoles, hasMinimumRole, type JWTTokenPayload } from './jwt.js';
 export { hashPassword, verifyPassword, validatePasswordStrength, generateSecurePassword } from './password.js';
 export { getConfig, loadConfig, resetConfig, validateRequiredConfig, getCorsOrigins, isProduction, isDevelopment, getJwtSecret, type AppConfig } from './config.js';
@@ -18,6 +21,9 @@ export { logger } from './logging.js';
 export { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 export { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 export { SESClient } from '@aws-sdk/client-ses';
+export { CloudFormationClient } from '@aws-sdk/client-cloudformation';
+export { S3Client } from '@aws-sdk/client-s3';
+export { STSClient } from '@aws-sdk/client-sts';
 
 // Re-export validation and utility libraries
 export { z } from 'zod';
@@ -34,6 +40,8 @@ import { logger } from './logging.js';
 import { validateRequiredConfig, getJwtSecret } from './config.js';
 import { getDynamoDBClient } from './dynamodb.js';
 import { getSESClient } from './ses.js';
+import { getCloudFormationClient } from './cloudformation.js';
+import { getS3Client } from './s3-templates.js';
 
 /**
  * Initialize all AWS integrations and validate configuration
@@ -49,6 +57,8 @@ export async function initializeAWSIntegrations(): Promise<void> {
     // Initialize clients (they're lazy-loaded, so this just validates config)
     getDynamoDBClient();
     getSESClient();
+    getCloudFormationClient();
+    getS3Client();
     
     // Validate JWT configuration
     getJwtSecret();
@@ -91,6 +101,24 @@ export async function healthCheckAWSIntegrations(): Promise<{
     } catch (error) {
       services['ses'] = 'error';
       errors.push(`SES: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+
+    // Check CloudFormation
+    try {
+      getCloudFormationClient();
+      services['cloudformation'] = 'healthy';
+    } catch (error) {
+      services['cloudformation'] = 'error';
+      errors.push(`CloudFormation: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+
+    // Check S3
+    try {
+      getS3Client();
+      services['s3'] = 'healthy';
+    } catch (error) {
+      services['s3'] = 'error';
+      errors.push(`S3: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 
     // Check JWT

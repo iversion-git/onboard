@@ -21,6 +21,15 @@ const envSchema = z.object({
   SES_FROM_EMAIL: z.string().email().optional(),
   SES_REGION: z.string().default('us-east-1'),
   
+  // CloudFormation Configuration
+  CLOUDFORMATION_REGION: z.string().optional(),
+  CLOUDFORMATION_TEMPLATE_BUCKET: z.string().optional(),
+  CLOUDFORMATION_CROSS_ACCOUNT_ROLE_PREFIX: z.string().default('ControlPlane-CrossAccount-Role'),
+  
+  // S3 Configuration
+  S3_TEMPLATE_BUCKET: z.string().optional(),
+  S3_REGION: z.string().optional(),
+  
   // CORS Configuration
   CORS_ORIGINS: z.string().optional(),
   
@@ -58,6 +67,15 @@ export interface AppConfig {
   };
   ses: {
     fromEmail: string;
+    region: string;
+  };
+  cloudformation: {
+    region: string;
+    templateBucket: string;
+    crossAccountRolePrefix: string;
+  };
+  s3: {
+    templateBucket: string;
     region: string;
   };
   cors: {
@@ -115,6 +133,15 @@ export function loadConfig(): AppConfig {
       ses: {
         fromEmail: env.SES_FROM_EMAIL || `noreply@${env.STAGE === 'prod' ? 'example.com' : 'dev.example.com'}`,
         region: env.SES_REGION,
+      },
+      cloudformation: {
+        region: env.CLOUDFORMATION_REGION || env.AWS_REGION,
+        templateBucket: env.CLOUDFORMATION_TEMPLATE_BUCKET || env.S3_TEMPLATE_BUCKET || `control-plane-templates-${env.STAGE}`,
+        crossAccountRolePrefix: env.CLOUDFORMATION_CROSS_ACCOUNT_ROLE_PREFIX,
+      },
+      s3: {
+        templateBucket: env.S3_TEMPLATE_BUCKET || `control-plane-templates-${env.STAGE}`,
+        region: env.S3_REGION || env.AWS_REGION,
       },
       cors: {
         origins: env.CORS_ORIGINS ? env.CORS_ORIGINS.split(',').map(origin => origin.trim()) : (env.STAGE === 'prod' ? [] : ['*']),

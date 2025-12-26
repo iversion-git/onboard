@@ -17,14 +17,23 @@ importers:
       '@aws-lambda-powertools/tracer':
         specifier: ^1.17.0
         version: 1.18.1
+      '@aws-sdk/client-cloudformation':
+        specifier: ^3.958.0
+        version: 3.958.0
       '@aws-sdk/client-dynamodb':
         specifier: ^3.490.0
+        version: 3.958.0
+      '@aws-sdk/client-s3':
+        specifier: ^3.958.0
         version: 3.958.0
       '@aws-sdk/client-secrets-manager':
         specifier: ^3.490.0
         version: 3.958.0
       '@aws-sdk/client-ses':
         specifier: ^3.490.0
+        version: 3.958.0
+      '@aws-sdk/client-sts':
+        specifier: ^3.958.0
         version: 3.958.0
       '@aws-sdk/lib-dynamodb':
         specifier: ^3.490.0
