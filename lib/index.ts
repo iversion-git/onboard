@@ -9,6 +9,7 @@ export * from './response.js';
 export * from './router.js';
 export * from './setup.js';
 export * from './permissions.js';
+export * from './data-models.js';
 
 // AWS Integrations and bundled dependencies (selective exports to avoid conflicts)
 export { 
@@ -35,6 +36,34 @@ export {
   type JWTTokenPayload,
   type AppConfig
 } from './aws-integrations.js';
+
+// Data models and validation schemas
+export {
+  type StaffRecord,
+  type PasswordResetToken,
+  type TenantRecord,
+  type JWTPayload,
+  StaffRecordSchema,
+  PasswordResetTokenSchema,
+  TenantRecordSchema,
+  JWTPayloadSchema,
+  CreateStaffSchema,
+  UpdateStaffSchema,
+  CreateTenantSchema,
+  LoginSchema,
+  PasswordResetRequestSchema,
+  PasswordResetConfirmSchema,
+  isStaffRecord,
+  isPasswordResetToken,
+  isTenantRecord,
+  isJWTPayload,
+  type StaffUpdate,
+  type TenantUpdate,
+  type DatabaseOperationResult,
+  type StaffQueryResult,
+  type TenantQueryResult,
+  type PasswordResetTokenQueryResult
+} from './data-models.js';
 
 // Permission utilities
 export {

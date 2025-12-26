@@ -81,7 +81,7 @@ This implementation plan converts the AWS Lambda Control Plane API from a multi-
   - **Property 3: Authorization enforcement**
   - **Validates: Requirements 2.2, 4.2, 6.4**
 
-- [-] 7. Implement DynamoDB data models and access patterns
+- [x] 7. Implement DynamoDB data models and access patterns
   - Create Staff table schema with EmailIndex GSI
   - Implement PasswordResetTokens table with TTL configuration
   - Create Tenants table schema
