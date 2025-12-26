@@ -1,7 +1,8 @@
 // Integration tests for middleware pipeline
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { APIGatewayProxyEvent, Context } from 'aws-lambda';
 import { createExampleRouter } from '../lib/example-routes.js';
+import { resetConfig } from '../lib/config.js';
 
 // Mock Lambda event helper
 function createMockEvent(
@@ -57,6 +58,20 @@ const mockContext: Context = {
 };
 
 describe('Middleware Integration', () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    resetConfig();
+    process.env = { ...originalEnv };
+    // Set required environment variables for testing
+    process.env['JWT_SECRET'] = 'this-is-a-very-long-secret-key-for-testing-purposes-123456';
+    process.env['STAGE'] = 'test';
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+    resetConfig();
+  });
   it('should handle health check without authentication', async () => {
     const router = createExampleRouter();
     
