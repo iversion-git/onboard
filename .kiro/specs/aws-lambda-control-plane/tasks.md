@@ -153,7 +153,7 @@ This implementation plan converts the AWS Lambda Control Plane API from a multi-
   - Set up cross-account IAM role assumption for deployments
   - _Requirements: 11.3, 11.5, 12.1, 12.2, 13.1, 13.2_
 
-- [ ] 16. Implement cluster management route handlers
+- [x] 16. Implement cluster management route handlers
   - Create GET /clusters handler with admin-only access for cluster listing
   - Build POST /clusters handler with cluster creation and CIDR validation
   - Implement POST /clusters/{id}/deploy handler for infrastructure deployment
