@@ -48,7 +48,7 @@ This implementation plan converts the AWS Lambda Control Plane API from a multi-
   - Configure esbuild to bundle all dependencies (AWS SDK v3, jose, zod, bcryptjs, routing framework) into single function
   - Configure DynamoDB client factory with retry patterns and table name resolution
   - Implement SES helpers for templated email sending
-  - Set up Secrets Manager integration for JWT signing key
+  - Set up JWT secret validation from environment variables
   - _Requirements: 1.1, 3.1, 3.5, 8.3_
 
 - [ ]* 4.1 Write property test for email normalization
@@ -59,7 +59,7 @@ This implementation plan converts the AWS Lambda Control Plane API from a multi-
   - Create JWT signing and verification utilities using jose library in lib/
   - Implement password hashing and verification with bcryptjs
   - Build authentication middleware for JWT verification within the single function
-  - Set up JWT signing key retrieval from Secrets Manager with caching
+  - Set up JWT secret retrieval from environment variables with validation
   - _Requirements: 1.1, 1.4, 1.5, 6.1_
 
 - [ ]* 5.1 Write property test for authentication round trip
@@ -150,8 +150,8 @@ This implementation plan converts the AWS Lambda Control Plane API from a multi-
   - Configure API Gateway throttling and CORS policies
   - Set up input validation with Zod schemas for all route handlers
   - Implement least-privilege IAM roles for the single function
-  - Configure Secrets Manager access restrictions
-  - _Requirements: 9.1, 9.4, 9.5_
+  - Configure environment variable security for JWT secrets
+  - _Requirements: 9.1, 9.4, 9.5, 9.6_
 
 - [ ] 16. Final checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.

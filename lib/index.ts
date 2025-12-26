@@ -11,7 +11,7 @@ export * from './setup.js';
 
 // Convenience re-exports for common patterns
 export { getLogger, log, createRequestLogger, createAuditLogger } from './logging.js';
-export { loadConfig, getConfig, getCorsOrigins } from './config.js';
+export { loadConfig, getConfig, getCorsOrigins, getJwtSecret } from './config.js';
 export { 
   ValidationError, 
   UnauthorizedError, 

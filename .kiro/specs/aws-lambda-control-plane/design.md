@@ -26,10 +26,10 @@ graph TB
     TenantHandlers --> DDB
     
     AuthHandlers --> SES[Amazon SES]
-    AuthHandlers --> SM[Secrets Manager]
     
     SingleLambda -.-> LibUtils[lib/ utilities - bundled]
     SingleLambda -.-> BundledDeps[All Dependencies - bundled with esbuild]
+    SingleLambda -.-> EnvVars[Environment Variables - JWT_SECRET]
 ```
 
 ### Single Function Architecture
@@ -70,7 +70,7 @@ graph TB
 
 **Dependencies Bundled with the Single Function**
 - Express.js or similar routing framework for internal request handling
-- AWS SDK v3 clients (DynamoDB, SES, Secrets Manager)
+- AWS SDK v3 clients (DynamoDB, SES)
 - `jose` library for JWT operations
 - `zod` for runtime validation
 - `bcryptjs` for password hashing
@@ -337,7 +337,7 @@ interface ErrorResponse {
 
 **Database Errors**: DynamoDB errors are caught and transformed into appropriate API errors with correlation IDs for troubleshooting.
 
-**External Service Errors**: SES and Secrets Manager errors are handled gracefully with retry logic and fallback behaviors where appropriate.
+**External Service Errors**: SES errors are handled gracefully with retry logic and fallback behaviors where appropriate.
 
 **Routing Errors**: Invalid routes or malformed requests are handled by the internal router with appropriate 404 or 400 responses.
 

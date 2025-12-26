@@ -16,8 +16,9 @@ provider:
     DYNAMODB_STAFF_TABLE: Staff-${self:provider.stage}
     DYNAMODB_PASSWORD_RESET_TOKENS_TABLE: PasswordResetTokens-${self:provider.stage}
     DYNAMODB_TENANTS_TABLE: Tenants-${self:provider.stage}
-    JWT_SECRET_NAME: ${self:service}-jwt-secret-${self:provider.stage}
-    SES_FROM_EMAIL: noreply@${self:custom.domain.${self:provider.stage}, 'example.com'}
+    JWT_SECRET: ${env:JWT_SECRET}
+    SES_FROM_EMAIL: ${env:SES_FROM_EMAIL, 'noreply@example.com'}
+    CORS_ORIGINS: ${self:custom.corsOrigins.${self:provider.stage}}
   iam:
     role:
       statements:
@@ -35,12 +36,6 @@ provider:
             - arn:aws:dynamodb:${self:provider.region}:*:table/Staff-${self:provider.stage}/index/*
             - arn:aws:dynamodb:${self:provider.region}:*:table/PasswordResetTokens-${self:provider.stage}
             - arn:aws:dynamodb:${self:provider.region}:*:table/Tenants-${self:provider.stage}
-        # Secrets Manager permissions
-        - Effect: Allow
-          Action:
-            - secretsmanager:GetSecretValue
-          Resource:
-            - arn:aws:secretsmanager:${self:provider.region}:*:secret:${self:service}-jwt-secret-${self:provider.stage}-*
         # SES permissions
         - Effect: Allow
           Action:
@@ -204,22 +199,9 @@ resources:
           - Key: Stage
             Value: ${self:provider.stage}
 
-    # JWT Secret in Secrets Manager
-    JWTSecret:
-      Type: AWS::SecretsManager::Secret
-      Properties:
-        Name: ${self:service}-jwt-secret-${self:provider.stage}
-        Description: JWT signing secret for ${self:service} ${self:provider.stage}
-        GenerateSecretString:
-          SecretStringTemplate: '{}'
-          GenerateStringKey: 'secret'
-          PasswordLength: 64
-          ExcludeCharacters: '"@/\'
-        Tags:
-          - Key: Service
-            Value: ${self:service}
-          - Key: Stage
-            Value: ${self:provider.stage}
+    # JWT Secret in Secrets Manager - REMOVED
+    # JWT secrets are now provided via environment variables
+    # Set JWT_SECRET environment variable before deployment
 
   Outputs:
     ApiUrl:

@@ -125,6 +125,7 @@ The AWS Lambda Control Plane API is a serverless "control plane" for an ERP prov
 3. WHEN storing sensitive data, THE Control_Plane_API SHALL use appropriate hashing and encryption methods
 4. WHEN accessing DynamoDB_Tables, THE Control_Plane_API SHALL use least-privilege IAM roles per function
 5. WHEN handling CORS requests, THE Control_Plane_API SHALL restrict origins appropriately based on deployment environment
+6. WHEN signing and verifying JWT_Token, THE Control_Plane_API SHALL use a JWT secret stored as an environment variable and never log or expose the secret value
 
 ### Requirement 10
 

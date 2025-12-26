@@ -65,15 +65,53 @@ pnpm run lint
 
 ## Deployment
 
+### Setting Up JWT Secret
+
+Before deploying, you must set the JWT_SECRET environment variable. The secret must be at least 32 characters long.
+
+```bash
+# Generate a secure JWT secret using the provided script (recommended)
+export JWT_SECRET=$(pnpm run generate-jwt-secret)
+
+# Or generate using OpenSSL
+export JWT_SECRET=$(openssl rand -base64 48)
+
+# Or set a custom secret (minimum 32 characters)
+export JWT_SECRET="your-very-long-and-secure-jwt-secret-key-here-123456789"
+
+# Validate an existing secret
+pnpm run generate-jwt-secret -- --validate "your-secret-here"
+```
+
+### Deploy Commands
+
 ```bash
 # Deploy to development stage
 pnpm run deploy:dev
 
-# Deploy to production stage
+# Deploy to production stage (requires additional environment variables)
+export SES_FROM_EMAIL="noreply@yourdomain.com"
+export CORS_ORIGINS="https://yourdomain.com"
 pnpm run deploy:prod
 
 # Remove deployment
 pnpm run remove
+```
+
+### Production Deployment Checklist
+
+Before deploying to production, ensure you have set:
+
+- `JWT_SECRET`: Secure JWT signing secret (minimum 32 characters)
+- `SES_FROM_EMAIL`: Verified email address in Amazon SES
+- `CORS_ORIGINS`: Comma-separated list of allowed origins
+
+```bash
+# Example production deployment
+export JWT_SECRET="$(pnpm run generate-jwt-secret)"
+export SES_FROM_EMAIL="noreply@yourdomain.com"
+export CORS_ORIGINS="https://yourdomain.com,https://app.yourdomain.com"
+pnpm run deploy:prod
 ```
 
 ## Key Features
@@ -89,14 +127,24 @@ pnpm run remove
 
 ## Environment Variables
 
-The following environment variables are automatically configured by Serverless Framework:
+The following environment variables are required for deployment:
 
+### Required for All Stages
 - `STAGE`: Deployment stage (dev, staging, prod)
-- `DYNAMODB_STAFF_TABLE`: Staff table name
-- `DYNAMODB_PASSWORD_RESET_TOKENS_TABLE`: Password reset tokens table name
-- `DYNAMODB_TENANTS_TABLE`: Tenants table name
-- `JWT_SECRET_NAME`: Secrets Manager secret name for JWT signing
+- `JWT_SECRET`: JWT signing secret (minimum 32 characters)
+- `DYNAMODB_STAFF_TABLE`: Staff table name (auto-generated if not provided)
+- `DYNAMODB_PASSWORD_RESET_TOKENS_TABLE`: Password reset tokens table name (auto-generated if not provided)
+- `DYNAMODB_TENANTS_TABLE`: Tenants table name (auto-generated if not provided)
+
+### Required for Production
 - `SES_FROM_EMAIL`: Email address for sending notifications
+- `CORS_ORIGINS`: Comma-separated list of allowed CORS origins
+
+### Optional Configuration
+- `LOG_LEVEL`: Logging level (debug, info, warn, error) - defaults to 'info'
+- `BCRYPT_ROUNDS`: Password hashing rounds - defaults to 12
+- `JWT_EXPIRY`: JWT token expiry time - defaults to '24h'
+- `PASSWORD_RESET_TOKEN_EXPIRY_HOURS`: Password reset token expiry - defaults to 24
 
 ## API Endpoints
 

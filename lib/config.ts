@@ -13,7 +13,7 @@ const configSchema = z.object({
   TENANTS_TABLE: z.string().optional(),
   
   // JWT Configuration
-  JWT_SECRET_NAME: z.string().default('lambda-control-plane/jwt-secret'),
+  JWT_SECRET: z.string().min(32, 'JWT secret must be at least 32 characters long'),
   JWT_EXPIRY: z.string().default('24h'),
   
   // SES Configuration
@@ -97,7 +97,8 @@ export function validateRequiredConfig(): void {
   
   const requiredForProduction = [
     'SES_FROM_EMAIL',
-    'CORS_ORIGINS'
+    'CORS_ORIGINS',
+    'JWT_SECRET'
   ];
   
   if (cfg.STAGE === 'prod') {
@@ -105,6 +106,11 @@ export function validateRequiredConfig(): void {
     if (missing.length > 0) {
       throw new Error(`Missing required production configuration: ${missing.join(', ')}`);
     }
+  }
+  
+  // Validate JWT secret length in all environments
+  if (cfg.JWT_SECRET.length < 32) {
+    throw new Error('JWT_SECRET must be at least 32 characters long for security');
   }
 }
 
@@ -133,4 +139,21 @@ export function isProduction(): boolean {
  */
 export function isDevelopment(): boolean {
   return getConfig().STAGE === 'dev';
+}
+
+/**
+ * Get JWT secret (with validation)
+ */
+export function getJwtSecret(): string {
+  const cfg = getConfig();
+  
+  if (!cfg.JWT_SECRET) {
+    throw new Error('JWT_SECRET environment variable is required');
+  }
+  
+  if (cfg.JWT_SECRET.length < 32) {
+    throw new Error('JWT_SECRET must be at least 32 characters long for security');
+  }
+  
+  return cfg.JWT_SECRET;
 }

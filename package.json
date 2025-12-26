@@ -15,6 +15,7 @@
     "test:properties": "vitest --run tests/properties/",
     "lint": "eslint . --ext .ts,.js",
     "type-check": "tsc --noEmit",
+    "generate-jwt-secret": "node scripts/generate-jwt-secret.js",
     "deploy": "serverless deploy",
     "deploy:dev": "serverless deploy --stage dev",
     "deploy:prod": "serverless deploy --stage prod",
