@@ -16,10 +16,17 @@
     "lint": "eslint . --ext .ts,.js",
     "type-check": "tsc --noEmit",
     "generate-jwt-secret": "node scripts/generate-jwt-secret.js",
+    "validate-deployment": "node scripts/validate-deployment.js",
     "deploy": "serverless deploy",
     "deploy:dev": "serverless deploy --stage dev",
+    "deploy:staging": "serverless deploy --stage staging",
     "deploy:prod": "serverless deploy --stage prod",
-    "remove": "serverless remove"
+    "deploy:script": "powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1",
+    "deploy:script:staging": "powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1 -Stage staging",
+    "deploy:script:prod": "powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1 -Stage prod",
+    "remove": "serverless remove",
+    "info": "serverless info",
+    "logs": "serverless logs -f api"
   },
   "dependencies": {
     "@aws-lambda-powertools/logger": "^1.17.0",

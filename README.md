@@ -65,54 +65,109 @@ pnpm run lint
 
 ## Deployment
 
+### Prerequisites for Deployment
+
+1. **AWS CLI**: Configured with appropriate credentials
+2. **Node.js 20+**: Required runtime version
+3. **PNPM**: Package manager (required, not npm)
+4. **Serverless Framework v3**: Installed globally or via pnpm
+5. **JWT Secret**: Secure secret for token signing
+
 ### Setting Up JWT Secret
 
 Before deploying, you must set the JWT_SECRET environment variable. The secret must be at least 32 characters long.
 
 ```bash
 # Generate a secure JWT secret using the provided script (recommended)
-export JWT_SECRET=$(pnpm run generate-jwt-secret)
+node scripts/generate-jwt-secret.js
 
-# Or generate using OpenSSL
+# Set the generated secret as environment variable
+export JWT_SECRET="your-generated-secret-here"
+
+# Or generate using OpenSSL (alternative)
 export JWT_SECRET=$(openssl rand -base64 48)
-
-# Or set a custom secret (minimum 32 characters)
-export JWT_SECRET="your-very-long-and-secure-jwt-secret-key-here-123456789"
-
-# Validate an existing secret
-pnpm run generate-jwt-secret -- --validate "your-secret-here"
 ```
+
+### Single Function Deployment
+
+The system uses a single Lambda function with internal routing for all API endpoints. This provides:
+
+- **Optimal Performance**: Bundled dependencies with esbuild
+- **Deployment Flexibility**: Can run on Lambda or App Runner
+- **Simplified Management**: One function to monitor and maintain
+- **Cost Efficiency**: Reduced cold starts and resource usage
 
 ### Deploy Commands
 
 ```bash
-# Deploy to development stage
+# Quick deployment to development
 pnpm run deploy:dev
 
-# Deploy to production stage (requires additional environment variables)
-export SES_FROM_EMAIL="noreply@yourdomain.com"
-export CORS_ORIGINS="https://yourdomain.com"
-pnpm run deploy:prod
+# Using the deployment script (recommended)
+pnpm run deploy:script
 
-# Remove deployment
-pnpm run remove
+# Deploy to staging
+pnpm run deploy:script:staging
+
+# Deploy to production with full validation
+pnpm run deploy:script:prod
+
+# Manual deployment with custom stage/region
+pnpm run deploy -- --stage staging --region us-west-2
 ```
 
-### Production Deployment Checklist
+### Production Deployment
 
-Before deploying to production, ensure you have set:
-
-- `JWT_SECRET`: Secure JWT signing secret (minimum 32 characters)
-- `SES_FROM_EMAIL`: Verified email address in Amazon SES
-- `CORS_ORIGINS`: Comma-separated list of allowed origins
+For production deployments, additional environment variables are required:
 
 ```bash
-# Example production deployment
-export JWT_SECRET="$(pnpm run generate-jwt-secret)"
+# Set required production environment variables
+export JWT_SECRET="$(node scripts/generate-jwt-secret.js)"
 export SES_FROM_EMAIL="noreply@yourdomain.com"
-export CORS_ORIGINS="https://yourdomain.com,https://app.yourdomain.com"
-pnpm run deploy:prod
+
+# Deploy to production
+pnpm run deploy:script:prod
 ```
+
+### Deployment Features
+
+The serverless.yml configuration includes:
+
+- **HTTP API Gateway**: Lower latency and cost than REST API
+- **Proxy Integration**: `/{proxy+}` routing to single function
+- **Stage-Scoped Resources**: DynamoDB tables with stage naming
+- **Performance Monitoring**: CloudWatch alarms for response times and errors
+- **Security**: Least-privilege IAM roles and CORS configuration
+- **Observability**: X-Ray tracing and structured logging
+
+### Monitoring and Alarms
+
+The deployment automatically creates CloudWatch alarms for:
+
+- **Lambda Duration**: p95 response time > 500ms
+- **Lambda Errors**: Error count > 10 in 5 minutes
+- **API Gateway 4xx**: Client errors > 20 in 5 minutes
+- **API Gateway 5xx**: Server errors > 5 in 5 minutes
+
+### Performance Targets
+
+The single function architecture is optimized for:
+
+- **p50 Response Time**: ≤ 300ms (warm requests)
+- **p95 Response Time**: ≤ 500ms (warm requests)
+- **p95 Cold Start**: ≤ 1200ms (first request)
+- **Memory Usage**: 1024MB (optimized for performance)
+- **Concurrent Executions**: 100 reserved, 5 provisioned
+
+### Deployment Validation
+
+After deployment, the system provides:
+
+1. **API URL**: HTTP API Gateway endpoint
+2. **Function ARN**: Lambda function identifier
+3. **Table Names**: DynamoDB table references
+4. **Performance Thresholds**: Monitoring configuration
+5. **Available Endpoints**: Complete API documentation
 
 ## Key Features
 

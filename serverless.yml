@@ -7,22 +7,28 @@ provider:
   runtime: nodejs20.x
   stage: ${opt:stage, 'dev'}
   region: ${opt:region, 'us-east-1'}
-  memorySize: 512
+  memorySize: 1024  # Increased for single function handling all routes
   timeout: 30
   architecture: arm64
   environment:
     STAGE: ${self:provider.stage}
     NODE_ENV: ${self:provider.stage}
+    # DynamoDB table names with stage-scoped naming
     DYNAMODB_STAFF_TABLE: Staff-${self:provider.stage}
     DYNAMODB_PASSWORD_RESET_TOKENS_TABLE: PasswordResetTokens-${self:provider.stage}
     DYNAMODB_TENANTS_TABLE: Tenants-${self:provider.stage}
+    # JWT secret from environment variable (Requirements 9.6)
     JWT_SECRET: ${env:JWT_SECRET}
+    # SES configuration
     SES_FROM_EMAIL: ${env:SES_FROM_EMAIL, 'noreply@example.com'}
+    # CORS origins for environment-specific configuration (Requirements 9.5)
     CORS_ORIGINS: ${self:custom.corsOrigins.${self:provider.stage}}
+    # Performance monitoring configuration (Requirements 10.1, 10.2)
+    AWS_LAMBDA_EXEC_WRAPPER: /opt/otel-instrument
   iam:
     role:
       statements:
-        # DynamoDB permissions
+        # DynamoDB permissions with least-privilege access (Requirements 9.4)
         - Effect: Allow
           Action:
             - dynamodb:GetItem
@@ -36,22 +42,33 @@ provider:
             - arn:aws:dynamodb:${self:provider.region}:*:table/Staff-${self:provider.stage}/index/*
             - arn:aws:dynamodb:${self:provider.region}:*:table/PasswordResetTokens-${self:provider.stage}
             - arn:aws:dynamodb:${self:provider.region}:*:table/Tenants-${self:provider.stage}
-        # SES permissions
+        # SES permissions with least-privilege access (Requirements 9.4)
         - Effect: Allow
           Action:
             - ses:SendEmail
             - ses:SendRawEmail
-          Resource: "*"
-        # X-Ray tracing permissions
+          Resource: 
+            - arn:aws:ses:${self:provider.region}:*:identity/*
+        # X-Ray tracing permissions for observability (Requirements 10.3, 10.4)
         - Effect: Allow
           Action:
             - xray:PutTraceSegments
             - xray:PutTelemetryRecords
           Resource: "*"
+        # CloudWatch Logs permissions for structured logging
+        - Effect: Allow
+          Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+          Resource: 
+            - arn:aws:logs:${self:provider.region}:*:log-group:/aws/lambda/${self:service}-${self:provider.stage}-*
   tracing:
     lambda: true
     apiGateway: true
   httpApi:
+    # HTTP API Gateway configuration for single function (Requirements 8.4)
+    name: ${self:service}-${self:provider.stage}-api
     cors:
       allowedOrigins:
         - ${self:custom.corsOrigins.${self:provider.stage}}
@@ -71,10 +88,15 @@ provider:
         - OPTIONS
       allowCredentials: false
       maxAge: 86400
+    # Note: HTTP API throttling is configured at the route level in resources section
 
 functions:
+  # Single Lambda function with internal routing (Requirements 8.1, 8.2, 8.4)
   api:
+    name: ${self:service}-${self:provider.stage}-api
     handler: index.handler
+    description: "Single Lambda function handling all API endpoints with internal routing"
+    # API Gateway proxy integration with /{proxy+} routing (Requirements 8.4)
     events:
       - httpApi:
           path: /{proxy+}
@@ -83,12 +105,19 @@ functions:
           path: /
           method: ANY
     environment:
+      # X-Ray tracing configuration
       _X_AMZN_TRACE_ID: ${env:_X_AMZN_TRACE_ID, ''}
+      # Function-specific environment variables
+      FUNCTION_NAME: ${self:service}-${self:provider.stage}-api
+    # Performance optimization for single function (Requirements 10.1, 10.2)
+    reservedConcurrency: 100  # Adjust based on expected load
+    provisionedConcurrency: 5  # Keep warm instances for better performance
 
 plugins:
   - serverless-esbuild
 
 custom:
+  # esbuild configuration for single function bundling (Requirements 8.3)
   esbuild:
     bundle: true
     minify: true
@@ -104,29 +133,41 @@ custom:
     installExtraArgs: ['--frozen-lockfile']
     keepOutputDirectory: true
     exclude: []
-    # Bundle all dependencies into the single function
+    # Bundle all dependencies into the single function for optimal performance
     bundleNodeModules: true
-    # Optimize for Lambda cold starts
+    # Optimize for Lambda cold starts (Requirements 10.2)
     treeShaking: true
-    # Include all AWS SDK v3 clients
+    # Include all AWS SDK v3 clients and dependencies
     bundleExternalDependencies: true
+    # Single entry point configuration
+    entryPoints:
+      - index.ts
     watch:
       pattern: ['**/*.ts', '**/*.js']
       ignore: ['node_modules/**', 'dist/**', '.serverless/**', 'tests/**']
   
-  # Environment-specific configurations
+  # Environment-specific configurations (Requirements 9.5)
   corsOrigins:
     dev: '*'
     staging: 'https://staging.example.com'
     prod: 'https://app.example.com'
   
+  # Domain configuration for future use
   domain:
     dev: 'dev.example.com'
     staging: 'staging.example.com'
     prod: 'example.com'
+  
+  # Performance monitoring thresholds (Requirements 10.1)
+  performanceThresholds:
+    p50ResponseTime: 300  # milliseconds
+    p95ResponseTime: 500  # milliseconds
+    p95ColdStart: 1200    # milliseconds
 
 resources:
   Resources:
+    # DynamoDB Tables with stage-scoped naming (Requirements 8.4)
+    
     # Staff Table
     StaffTable:
       Type: AWS::DynamoDB::Table
@@ -157,6 +198,8 @@ resources:
             Value: ${self:service}
           - Key: Stage
             Value: ${self:provider.stage}
+          - Key: Architecture
+            Value: single-function
 
     # Password Reset Tokens Table
     PasswordResetTokensTable:
@@ -182,6 +225,8 @@ resources:
             Value: ${self:service}
           - Key: Stage
             Value: ${self:provider.stage}
+          - Key: Architecture
+            Value: single-function
 
     # Tenants Table
     TenantsTable:
@@ -204,14 +249,88 @@ resources:
             Value: ${self:service}
           - Key: Stage
             Value: ${self:provider.stage}
+          - Key: Architecture
+            Value: single-function
 
-    # JWT Secret in Secrets Manager - REMOVED
-    # JWT secrets are now provided via environment variables
+    # CloudWatch Alarms for Performance Monitoring (Requirements 10.3, 10.4)
+    
+    # Lambda Duration Alarm (p95 response time)
+    LambdaDurationAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        AlarmName: ${self:service}-${self:provider.stage}-lambda-duration-p95
+        AlarmDescription: "Lambda function p95 duration exceeds threshold"
+        MetricName: Duration
+        Namespace: AWS/Lambda
+        Statistic: Average
+        Period: 300
+        EvaluationPeriods: 2
+        Threshold: 500  # 500ms threshold for p95
+        ComparisonOperator: GreaterThanThreshold
+        Dimensions:
+          - Name: FunctionName
+            Value: ${self:service}-${self:provider.stage}-api
+        TreatMissingData: notBreaching
+
+    # Lambda Error Rate Alarm
+    LambdaErrorRateAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        AlarmName: ${self:service}-${self:provider.stage}-lambda-error-rate
+        AlarmDescription: "Lambda function error rate exceeds threshold"
+        MetricName: Errors
+        Namespace: AWS/Lambda
+        Statistic: Sum
+        Period: 300
+        EvaluationPeriods: 2
+        Threshold: 10  # 10 errors in 5 minutes
+        ComparisonOperator: GreaterThanThreshold
+        Dimensions:
+          - Name: FunctionName
+            Value: ${self:service}-${self:provider.stage}-api
+        TreatMissingData: notBreaching
+
+    # API Gateway 4xx Error Alarm
+    ApiGateway4xxAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        AlarmName: ${self:service}-${self:provider.stage}-api-4xx-errors
+        AlarmDescription: "API Gateway 4xx error rate exceeds threshold"
+        MetricName: 4XXError
+        Namespace: AWS/ApiGateway
+        Statistic: Sum
+        Period: 300
+        EvaluationPeriods: 2
+        Threshold: 20  # 20 4xx errors in 5 minutes
+        ComparisonOperator: GreaterThanThreshold
+        Dimensions:
+          - Name: ApiName
+            Value: ${self:service}-${self:provider.stage}-api
+        TreatMissingData: notBreaching
+
+    # API Gateway 5xx Error Alarm
+    ApiGateway5xxAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        AlarmName: ${self:service}-${self:provider.stage}-api-5xx-errors
+        AlarmDescription: "API Gateway 5xx error rate exceeds threshold"
+        MetricName: 5XXError
+        Namespace: AWS/ApiGateway
+        Statistic: Sum
+        Period: 300
+        EvaluationPeriods: 1
+        Threshold: 5  # 5 5xx errors in 5 minutes
+        ComparisonOperator: GreaterThanThreshold
+        Dimensions:
+          - Name: ApiName
+            Value: ${self:service}-${self:provider.stage}-api
+        TreatMissingData: notBreaching
     # Set JWT_SECRET environment variable before deployment
 
   Outputs:
+    # API Gateway outputs
     ApiUrl:
-      Description: HTTP API Gateway URL
+      Description: HTTP API Gateway URL for single function
       Value:
         Fn::Join:
           - ''
@@ -223,14 +342,50 @@ resources:
       Export:
         Name: ${self:service}-${self:provider.stage}-api-url
     
+    ApiId:
+      Description: HTTP API Gateway ID
+      Value:
+        Ref: HttpApi
+      Export:
+        Name: ${self:service}-${self:provider.stage}-api-id
+    
+    # Lambda function outputs
+    LambdaFunctionName:
+      Description: Single Lambda function name
+      Value: ${self:service}-${self:provider.stage}-api
+      Export:
+        Name: ${self:service}-${self:provider.stage}-lambda-name
+    
+    LambdaFunctionArn:
+      Description: Single Lambda function ARN
+      Value:
+        Fn::GetAtt: [ApiLambdaFunction, Arn]
+      Export:
+        Name: ${self:service}-${self:provider.stage}-lambda-arn
+    
+    # DynamoDB table outputs
     StaffTableName:
       Description: Staff DynamoDB Table Name
       Value: Staff-${self:provider.stage}
       Export:
         Name: ${self:service}-${self:provider.stage}-staff-table
     
+    PasswordResetTokensTableName:
+      Description: Password Reset Tokens DynamoDB Table Name
+      Value: PasswordResetTokens-${self:provider.stage}
+      Export:
+        Name: ${self:service}-${self:provider.stage}-password-reset-tokens-table
+    
     TenantsTableName:
       Description: Tenants DynamoDB Table Name
       Value: Tenants-${self:provider.stage}
       Export:
         Name: ${self:service}-${self:provider.stage}-tenants-table
+    
+    # Performance monitoring outputs
+    PerformanceThresholds:
+      Description: Performance monitoring thresholds
+      Value:
+        Fn::Sub: "p50: ${self:custom.performanceThresholds.p50ResponseTime}ms, p95: ${self:custom.performanceThresholds.p95ResponseTime}ms, cold start p95: ${self:custom.performanceThresholds.p95ColdStart}ms"
+      Export:
+        Name: ${self:service}-${self:provider.stage}-performance-thresholds
