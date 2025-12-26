@@ -2,12 +2,16 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import { createRouterForEnvironment } from './lib/setup.js';
 import { registerAuthRoutes } from './routes/auth.js';
+import { registerStaffRoutes } from './routes/staff.js';
 
 // Create router instance with environment-specific configuration
 const router = createRouterForEnvironment();
 
 // Register authentication routes
 registerAuthRoutes(router);
+
+// Register staff management routes
+registerStaffRoutes(router);
 
 // Main Lambda handler
 export const handler = async (

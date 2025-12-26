@@ -106,7 +106,7 @@ This implementation plan converts the AWS Lambda Control Plane API from a multi-
 - [x] 9. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [-] 10. Implement staff management route handlers
+- [x] 10. Implement staff management route handlers
   - Create POST /staff/register handler with admin-only access and account creation
   - Build POST /staff/enable and POST /staff/disable handlers with admin authorization
   - Implement GET /staff/me handler with authenticated profile retrieval
