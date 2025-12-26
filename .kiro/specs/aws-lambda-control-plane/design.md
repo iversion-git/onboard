@@ -2,9 +2,9 @@
 
 ## Overview
 
-The AWS Lambda Control Plane API is designed as a serverless microservices architecture running on AWS Lambda with Node.js 20. The system follows a "one Lambda per route" pattern with bundled dependencies using esbuild to ensure optimal performance, simplified deployment, and consistent behavior. The architecture emphasizes small, focused functions with centralized authentication and authorization through an API Gateway Lambda Authorizer.
+The AWS Lambda Control Plane API is designed as a single-function serverless architecture running on AWS Lambda with Node.js 20. The system uses a single Lambda function with internal Node.js-based routing to handle all API endpoints, enabling flexible deployment to either AWS Lambda or AWS App Runner without code changes. The architecture emphasizes optimal performance through bundled dependencies using esbuild, simplified deployment, and consistent behavior across all endpoints.
 
-The system serves as a control plane for ERP provisioning workflows, providing secure staff authentication, comprehensive role-based access control, and controlled tenant registration capabilities. All functions use a shared lib/ directory structure with bundled dependencies for consistent patterns while maintaining deployment independence.
+The system serves as a control plane for ERP provisioning workflows, providing secure staff authentication, comprehensive role-based access control, and controlled tenant registration capabilities. The single function contains all business logic with internal routing, middleware for authentication/authorization, and shared utilities for consistent patterns across all endpoints.
 
 ## Architecture
 
@@ -13,85 +13,143 @@ The system serves as a control plane for ERP provisioning workflows, providing s
 ```mermaid
 graph TB
     Client[Client Applications] --> APIGW[API Gateway HTTP API]
-    APIGW --> Auth[Lambda Authorizer]
-    Auth --> AuthLambda[Auth Lambdas]
-    Auth --> StaffLambda[Staff Lambdas]
-    Auth --> TenantLambda[Tenant Lambdas]
+    APIGW --> SingleLambda[Single Lambda Function]
     
-    AuthLambda --> DDB[(DynamoDB Tables)]
-    StaffLambda --> DDB
-    TenantLambda --> DDB
+    SingleLambda --> Router[Internal Node.js Router]
+    Router --> AuthMiddleware[Authentication Middleware]
+    AuthMiddleware --> AuthHandlers[Auth Route Handlers]
+    AuthMiddleware --> StaffHandlers[Staff Route Handlers]
+    AuthMiddleware --> TenantHandlers[Tenant Route Handlers]
     
-    AuthLambda --> SES[Amazon SES]
-    AuthLambda --> SM[Secrets Manager]
+    AuthHandlers --> DDB[(DynamoDB Tables)]
+    StaffHandlers --> DDB
+    TenantHandlers --> DDB
     
-    AuthLambda -.-> LibUtils[lib/ utilities - bundled]
-    StaffLambda -.-> LibUtils
-    TenantLambda -.-> LibUtils
+    AuthHandlers --> SES[Amazon SES]
+    AuthHandlers --> SM[Secrets Manager]
     
-    AuthLambda -.-> BundledDeps[Dependencies - bundled with esbuild]
-    StaffLambda -.-> BundledDeps
-    TenantLambda -.-> BundledDeps
+    SingleLambda -.-> LibUtils[lib/ utilities - bundled]
+    SingleLambda -.-> BundledDeps[All Dependencies - bundled with esbuild]
 ```
+
+### Single Function Architecture
+
+**Internal Routing System**
+- Express.js-like routing within the single Lambda function
+- Middleware pipeline for authentication, authorization, and request processing
+- Route handlers organized by domain (auth, staff, tenant)
+- Centralized error handling and response formatting
+- Request correlation and structured logging throughout the pipeline
+
+**Deployment Flexibility**
+- Single function can run on AWS Lambda with API Gateway integration
+- Same codebase can run on AWS App Runner as a containerized web server
+- Internal routing handles all endpoint logic regardless of deployment target
+- Environment-specific configuration for Lambda vs App Runner differences
 
 ### Bundled Dependencies Strategy
 
 **esbuild Configuration**
-- Bundle all dependencies into each function for optimal performance
+- Bundle all dependencies into the single function for optimal performance
 - Use ES modules with .mjs output extension for proper Node.js recognition
 - Target Node.js 20 runtime for AWS Lambda compatibility
 - Minify and tree-shake for smaller bundle sizes
 - Source maps enabled for debugging
+- Single entry point that includes all routing and business logic
 
 **Package Management**: PNPM must be used for all dependency management instead of npm. This provides faster installs, better disk space efficiency, and stricter dependency resolution that prevents phantom dependencies.
 
 **Shared lib/ Directory Structure**
-- HTTP utilities (request parsing, response building)
-- Authentication utilities (JWT verification, role checking)
+- HTTP utilities (request parsing, response building, routing helpers)
+- Authentication utilities (JWT verification, role checking, middleware)
 - Data access patterns (DynamoDB client factory, query helpers)
 - Error handling (standardized error types and responses)
 - Security utilities (input sanitization, PII-safe logging)
 - Configuration management (environment variable validation)
+- Internal routing system (route registration, middleware pipeline)
 
-**Dependencies Bundled with Each Function**
+**Dependencies Bundled with the Single Function**
+- Express.js or similar routing framework for internal request handling
 - AWS SDK v3 clients (DynamoDB, SES, Secrets Manager)
 - `jose` library for JWT operations
 - `zod` for runtime validation
 - `bcryptjs` for password hashing
 - `validator` for email/URL validation
+- AWS Lambda Powertools for observability
 
 ### API Gateway Configuration
 
 - **Type**: HTTP API (lower latency, lower cost than REST API)
-- **Authorizer**: Single Lambda Authorizer for all protected routes
-- **Caching**: 5-minute TTL for authorization decisions
+- **Integration**: Lambda Proxy Integration with the single function
+- **Authentication**: JWT verification handled within the single function via middleware
 - **CORS**: Enabled for development, restricted origins in production
-- **Throttling**: Configured per-route based on expected usage patterns
+- **Throttling**: Configured at the API Gateway level based on expected usage patterns
+- **Routing**: All routes (`/{proxy+}`) forwarded to the single Lambda function for internal routing
 
 ## Components and Interfaces
 
-### Lambda Functions
+### Single Lambda Function Structure
 
-**Authentication Domain (`api/auth/`)**
+**Main Handler (`index.ts`)**
+- Entry point for all API requests
+- Initializes the internal router and middleware pipeline
+- Handles Lambda-specific request/response transformation
+- Manages cold start optimization and connection pooling
+
+**Internal Router (`lib/router.ts`)**
+- Express.js-style routing system within the Lambda function
+- Route registration and middleware pipeline management
+- Request parsing and response formatting
+- Error handling and logging integration
+
+**Middleware Pipeline**
+- `authMiddleware.ts` - JWT verification and staff context extraction
+- `validationMiddleware.ts` - Request validation using Zod schemas
+- `corsMiddleware.ts` - CORS header management
+- `loggingMiddleware.ts` - Structured logging and correlation IDs
+
+**Route Handlers (organized by domain)**
+
+**Authentication Domain (`handlers/auth/`)**
 - `login.ts` - POST /auth/login
 - `password-reset-request.ts` - POST /auth/password-reset/request  
 - `password-reset-confirm.ts` - POST /auth/password-reset/confirm
 
-**Staff Management Domain (`api/staff/`)**
+**Staff Management Domain (`handlers/staff/`)**
 - `register.ts` - POST /staff/register (admin only)
 - `enable.ts` - POST /staff/enable (admin only)
 - `disable.ts` - POST /staff/disable (admin only)
 - `me.ts` - GET /staff/me (authenticated)
 
-**Tenant Domain (`api/tenant/`)**
+**Tenant Domain (`handlers/tenant/`)**
 - `register.ts` - POST /tenant/register (admin/manager only)
-
-**Authorization**
-- `authorizer.ts` - Lambda Authorizer for JWT verification and RBAC
 
 ### Shared Core Interfaces
 
 ```typescript
+// Internal Router Types
+interface RouteHandler {
+  (req: InternalRequest, res: InternalResponse): Promise<void>;
+}
+
+interface InternalRequest {
+  method: string;
+  path: string;
+  headers: Record<string, string>;
+  body: any;
+  query: Record<string, string>;
+  params: Record<string, string>;
+  context: AuthContext;
+  correlationId: string;
+}
+
+interface InternalResponse {
+  status(code: number): InternalResponse;
+  json(data: any): InternalResponse;
+  send(data: string): InternalResponse;
+  header(name: string, value: string): InternalResponse;
+}
+
 // HTTP Response Utilities
 interface ApiResponse<T = any> {
   statusCode: number;
@@ -228,9 +286,9 @@ The following properties provide unique validation value and will be implemented
 *For any* email address input, the system should normalize it to lowercase and validate the format before processing
 **Validates: Requirements 9.2**
 
-**Property 8: JWT authorizer context passing**
-*For any* valid JWT token, the authorizer should pass complete and accurate staff context to business lambdas
-**Validates: Requirements 6.1, 6.3**
+**Property 8: Internal routing consistency**
+*For any* valid API request, the internal router should correctly match routes, apply middleware, and execute the appropriate handler with proper context
+**Validates: Requirements 6.1, 6.3, 8.2**
 
 **Property 9: Duplicate prevention**
 *For any* resource creation (staff, tenant), attempting to create duplicates should be rejected with conflict errors
@@ -240,9 +298,9 @@ The following properties provide unique validation value and will be implemented
 *For any* API operation, structured logs should be generated with correlation IDs and proper metrics should be collected
 **Validates: Requirements 7.2, 10.3, 10.4**
 
-**Property 11: PNPM dependency management**
-*For any* dependency installation or layer building, PNPM must be used instead of npm to ensure consistent, efficient dependency resolution
-**Validates: Package management requirements**
+**Property 11: Single function architecture compliance**
+*For any* new endpoint or functionality, it should be implemented within the single function using the internal routing system without external dependencies
+**Validates: Requirements 8.1, 8.2, 8.5**
 
 ## Error Handling
 
@@ -275,11 +333,13 @@ interface ErrorResponse {
 
 **Input Validation**: All endpoints use Zod schemas for strict input validation. Unknown fields are rejected, and validation errors include specific field-level details.
 
-**Authentication Errors**: JWT verification failures are handled consistently by the Lambda Authorizer, preventing business logic from executing.
+**Authentication Errors**: JWT verification failures are handled by the authentication middleware within the single function, preventing unauthorized access to business logic.
 
 **Database Errors**: DynamoDB errors are caught and transformed into appropriate API errors with correlation IDs for troubleshooting.
 
 **External Service Errors**: SES and Secrets Manager errors are handled gracefully with retry logic and fallback behaviors where appropriate.
+
+**Routing Errors**: Invalid routes or malformed requests are handled by the internal router with appropriate 404 or 400 responses.
 
 ## Testing Strategy
 

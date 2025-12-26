@@ -1,0 +1,4 @@
+# This directory will contain test files
+# - unit/ - Unit tests for specific components
+# - properties/ - Property-based tests for correctness properties
+# - integration/ - Integration tests for end-to-end scenarios

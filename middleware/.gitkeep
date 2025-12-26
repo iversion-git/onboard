@@ -1,0 +1,5 @@
+# This directory will contain middleware components
+# - authMiddleware.ts - JWT verification and staff context extraction
+# - validationMiddleware.ts - Request validation using Zod schemas
+# - corsMiddleware.ts - CORS header management
+# - loggingMiddleware.ts - Structured logging and correlation IDs

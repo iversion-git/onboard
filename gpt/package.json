@@ -18,7 +18,7 @@
     "@aws-sdk/client-dynamodb": "^3.540.0",
     "@aws-sdk/client-secrets-manager": "^3.540.0",
     "@aws-sdk/util-dynamodb": "^3.540.0",
-    "argon2": "^0.31.2",
+    "bcryptjs": "^2.4.3",
     "jose": "^5.9.6",
     "zod": "^3.22.4"
   },

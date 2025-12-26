@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../index.ts"],
+  "sourcesContent": ["// Main Lambda handler entry point\r\n// This will be implemented in later tasks\r\nexport const handler = async (_event: any, _context: any) => {\r\n  // TODO: Implement main handler with internal routing\r\n  return {\r\n    statusCode: 200,\r\n    body: JSON.stringify({ message: 'AWS Lambda Control Plane API' })\r\n  };\r\n};"],
+  "mappings": "AAEO,IAAMA,EAAU,MAAOC,EAAaC,KAElC,CACL,WAAY,IACZ,KAAM,KAAK,UAAU,CAAE,QAAS,8BAA+B,CAAC,CAClE",
+  "names": ["handler", "_event", "_context"]
+}

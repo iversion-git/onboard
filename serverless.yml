@@ -1,0 +1,248 @@
+service: aws-lambda-control-plane
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  stage: ${opt:stage, 'dev'}
+  region: ${opt:region, 'us-east-1'}
+  memorySize: 512
+  timeout: 30
+  architecture: arm64
+  environment:
+    STAGE: ${self:provider.stage}
+    NODE_ENV: ${self:provider.stage}
+    DYNAMODB_STAFF_TABLE: Staff-${self:provider.stage}
+    DYNAMODB_PASSWORD_RESET_TOKENS_TABLE: PasswordResetTokens-${self:provider.stage}
+    DYNAMODB_TENANTS_TABLE: Tenants-${self:provider.stage}
+    JWT_SECRET_NAME: ${self:service}-jwt-secret-${self:provider.stage}
+    SES_FROM_EMAIL: noreply@${self:custom.domain.${self:provider.stage}, 'example.com'}
+  iam:
+    role:
+      statements:
+        # DynamoDB permissions
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+            - dynamodb:Query
+            - dynamodb:Scan
+          Resource:
+            - arn:aws:dynamodb:${self:provider.region}:*:table/Staff-${self:provider.stage}
+            - arn:aws:dynamodb:${self:provider.region}:*:table/Staff-${self:provider.stage}/index/*
+            - arn:aws:dynamodb:${self:provider.region}:*:table/PasswordResetTokens-${self:provider.stage}
+            - arn:aws:dynamodb:${self:provider.region}:*:table/Tenants-${self:provider.stage}
+        # Secrets Manager permissions
+        - Effect: Allow
+          Action:
+            - secretsmanager:GetSecretValue
+          Resource:
+            - arn:aws:secretsmanager:${self:provider.region}:*:secret:${self:service}-jwt-secret-${self:provider.stage}-*
+        # SES permissions
+        - Effect: Allow
+          Action:
+            - ses:SendEmail
+            - ses:SendRawEmail
+          Resource: "*"
+        # X-Ray tracing permissions
+        - Effect: Allow
+          Action:
+            - xray:PutTraceSegments
+            - xray:PutTelemetryRecords
+          Resource: "*"
+  tracing:
+    lambda: true
+    apiGateway: true
+  httpApi:
+    cors:
+      allowedOrigins:
+        - ${self:custom.corsOrigins.${self:provider.stage}}
+      allowedHeaders:
+        - Content-Type
+        - Authorization
+        - X-Amz-Date
+        - X-Api-Key
+        - X-Amz-Security-Token
+        - X-Amz-User-Agent
+        - X-Correlation-ID
+      allowedMethods:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+        - OPTIONS
+      allowCredentials: false
+      maxAge: 86400
+
+functions:
+  api:
+    handler: index.handler
+    events:
+      - httpApi:
+          path: /{proxy+}
+          method: ANY
+      - httpApi:
+          path: /
+          method: ANY
+    environment:
+      _X_AMZN_TRACE_ID: ${env:_X_AMZN_TRACE_ID, ''}
+
+plugins:
+  - serverless-esbuild
+
+custom:
+  esbuild:
+    bundle: true
+    minify: true
+    sourcemap: true
+    target: node20
+    format: esm
+    platform: node
+    outExtension:
+      .js: .mjs
+    mainFields: [module, main]
+    external: []
+    packager: pnpm
+    installExtraArgs: ['--frozen-lockfile']
+    keepOutputDirectory: true
+    exclude: []
+    watch:
+      pattern: ['**/*.ts', '**/*.js']
+      ignore: ['node_modules/**', 'dist/**', '.serverless/**', 'tests/**']
+  
+  # Environment-specific configurations
+  corsOrigins:
+    dev: '*'
+    staging: 'https://staging.example.com'
+    prod: 'https://app.example.com'
+  
+  domain:
+    dev: 'dev.example.com'
+    staging: 'staging.example.com'
+    prod: 'example.com'
+
+resources:
+  Resources:
+    # Staff Table
+    StaffTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: Staff-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: staff_id
+            AttributeType: S
+          - AttributeName: email
+            AttributeType: S
+        KeySchema:
+          - AttributeName: staff_id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: EmailIndex
+            KeySchema:
+              - AttributeName: email
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        SSESpecification:
+          SSEEnabled: true
+        Tags:
+          - Key: Service
+            Value: ${self:service}
+          - Key: Stage
+            Value: ${self:provider.stage}
+
+    # Password Reset Tokens Table
+    PasswordResetTokensTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: PasswordResetTokens-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: token_hash
+            AttributeType: S
+        KeySchema:
+          - AttributeName: token_hash
+            KeyType: HASH
+        TimeToLiveSpecification:
+          AttributeName: expires_at
+          Enabled: true
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        SSESpecification:
+          SSEEnabled: true
+        Tags:
+          - Key: Service
+            Value: ${self:service}
+          - Key: Stage
+            Value: ${self:provider.stage}
+
+    # Tenants Table
+    TenantsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: Tenants-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: tenant_id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: tenant_id
+            KeyType: HASH
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        SSESpecification:
+          SSEEnabled: true
+        Tags:
+          - Key: Service
+            Value: ${self:service}
+          - Key: Stage
+            Value: ${self:provider.stage}
+
+    # JWT Secret in Secrets Manager
+    JWTSecret:
+      Type: AWS::SecretsManager::Secret
+      Properties:
+        Name: ${self:service}-jwt-secret-${self:provider.stage}
+        Description: JWT signing secret for ${self:service} ${self:provider.stage}
+        GenerateSecretString:
+          SecretStringTemplate: '{}'
+          GenerateStringKey: 'secret'
+          PasswordLength: 64
+          ExcludeCharacters: '"@/\'
+        Tags:
+          - Key: Service
+            Value: ${self:service}
+          - Key: Stage
+            Value: ${self:provider.stage}
+
+  Outputs:
+    ApiUrl:
+      Description: HTTP API Gateway URL
+      Value:
+        Fn::Join:
+          - ''
+          - - 'https://'
+            - Ref: HttpApi
+            - '.execute-api.'
+            - ${self:provider.region}
+            - '.amazonaws.com'
+      Export:
+        Name: ${self:service}-${self:provider.stage}-api-url
+    
+    StaffTableName:
+      Description: Staff DynamoDB Table Name
+      Value: Staff-${self:provider.stage}
+      Export:
+        Name: ${self:service}-${self:provider.stage}-staff-table
+    
+    TenantsTableName:
+      Description: Tenants DynamoDB Table Name
+      Value: Tenants-${self:provider.stage}
+      Export:
+        Name: ${self:service}-${self:provider.stage}-tenants-table

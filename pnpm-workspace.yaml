@@ -1,0 +1,6 @@
+packages:
+  - '.'
+
+# PNPM workspace configuration for AWS Lambda Control Plane
+# This enables PNPM's workspace features for better dependency management
+# and ensures consistent dependency resolution across the project

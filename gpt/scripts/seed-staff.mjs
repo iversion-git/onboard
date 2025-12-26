@@ -28,7 +28,7 @@ const staff_id = crypto.randomUUID();
 const roles = rolesRaw.split(",").map(s => s.trim()).filter(Boolean);
 const enabled = enabledRaw.toLowerCase() !== "false";
 
-const salt = await bcrypt.genSalt(12);
+const salt = await bcrypt.genSalt(8);
 const password_hash = await bcrypt.hash(password, salt);
 
 const item = {

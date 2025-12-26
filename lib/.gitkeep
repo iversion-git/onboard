@@ -1,0 +1,8 @@
+# This directory will contain shared utilities
+# - HTTP utilities (request parsing, response building, routing helpers)
+# - Authentication utilities (JWT verification, role checking, middleware)
+# - Data access patterns (DynamoDB client factory, query helpers)
+# - Error handling (standardized error types and responses)
+# - Security utilities (input sanitization, PII-safe logging)
+# - Configuration management (environment variable validation)
+# - Internal routing system (route registration, middleware pipeline)

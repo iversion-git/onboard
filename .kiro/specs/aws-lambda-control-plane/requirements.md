@@ -2,16 +2,16 @@
 
 ## Introduction
 
-The AWS Lambda Control Plane API is a serverless "control plane" for an ERP provisioning workflow. The system runs on AWS Lambda behind API Gateway (HTTP API) and provides staff authentication using JWT tokens, comprehensive staff and role administration, secure password reset functionality via Amazon SES, and controlled tenant registration that triggers downstream provisioning workflows. The system follows a microservices architecture with small, focused Lambda functions using a bundled deployment approach with esbuild for optimal performance and simplified dependency management.
+The AWS Lambda Control Plane API is a serverless "control plane" for an ERP provisioning workflow. The system runs as a single AWS Lambda function behind API Gateway (HTTP API) and provides staff authentication using JWT tokens, comprehensive staff and role administration, secure password reset functionality via Amazon SES, and controlled tenant registration that triggers downstream provisioning workflows. The system uses Node.js-based internal routing to handle all API endpoints within a single Lambda function, enabling flexible deployment to either AWS Lambda or AWS App Runner while maintaining optimal performance through bundled dependencies with esbuild.
 
 ## Glossary
 
-- **Control_Plane_API**: The serverless API system that manages staff authentication, administration, and tenant provisioning workflows
+- **Control_Plane_API**: The serverless API system that manages staff authentication, administration, and tenant provisioning workflows using a single Lambda function with internal routing
 - **Staff_User**: An authenticated user with specific roles (admin, manager, staff) who can access the system
 - **JWT_Token**: JSON Web Token used for authentication containing staff identity and role information
 - **Tenant**: A customer entity that requires ERP provisioning services
-- **Lambda_Authorizer**: A centralized API Gateway Lambda function that verifies JWT tokens and enforces role-based access control
-- **Bundled_Functions**: Lambda functions with all dependencies bundled using esbuild for optimal performance and simplified deployment
+- **Internal_Router**: Node.js-based routing system within the single Lambda function that handles all API endpoints
+- **Single_Function_Architecture**: A deployment pattern using one Lambda function with internal routing, enabling portability to other compute platforms like App Runner
 - **Password_Reset_Token**: A time-limited, hashed token used for secure password reset operations
 - **DynamoDB_Tables**: NoSQL database tables storing staff, tenant, and password reset token data
 - **SES_Service**: Amazon Simple Email Service used for sending password reset emails
@@ -80,39 +80,39 @@ The AWS Lambda Control Plane API is a serverless "control plane" for an ERP prov
 
 ### Requirement 6
 
-**User Story:** As a system administrator, I want centralized JWT verification and role enforcement, so that security policies are consistently applied across all protected endpoints.
+**User Story:** As a system administrator, I want centralized JWT verification and role enforcement within the single Lambda function, so that security policies are consistently applied across all API endpoints.
 
 #### Acceptance Criteria
 
-1. WHEN any protected endpoint receives a request, THE Lambda_Authorizer SHALL verify the JWT_Token before allowing access to business logic
-2. WHEN JWT_Token verification fails, THE Lambda_Authorizer SHALL deny access and prevent route Lambda execution
-3. WHEN JWT_Token is valid, THE Lambda_Authorizer SHALL pass staff identity and role context to the business Lambda
-4. WHEN role-based access control is required, THE Lambda_Authorizer SHALL enforce minimum role requirements for each endpoint
-5. WHEN authorization decisions are cached, THE Lambda_Authorizer SHALL respect TTL settings to balance performance with security
+1. WHEN any API endpoint receives a request, THE Internal_Router SHALL verify the JWT_Token before allowing access to business logic
+2. WHEN JWT_Token verification fails, THE Internal_Router SHALL deny access and return an authentication error
+3. WHEN JWT_Token is valid, THE Internal_Router SHALL pass staff identity and role context to the endpoint handler
+4. WHEN role-based access control is required, THE Internal_Router SHALL enforce minimum role requirements for each endpoint
+5. WHEN processing protected routes, THE Internal_Router SHALL validate authorization before executing endpoint-specific business logic
 
 ### Requirement 7
 
-**User Story:** As a developer, I want consistent error handling and logging across all Lambda functions, so that the system is maintainable and issues can be diagnosed effectively.
+**User Story:** As a developer, I want consistent error handling and logging within the single Lambda function, so that the system is maintainable and issues can be diagnosed effectively.
 
 #### Acceptance Criteria
 
-1. WHEN any Lambda function encounters an error, THE Control_Plane_API SHALL return standardized error responses with appropriate HTTP status codes
+1. WHEN any endpoint handler encounters an error, THE Control_Plane_API SHALL return standardized error responses with appropriate HTTP status codes
 2. WHEN processing requests, THE Control_Plane_API SHALL use structured JSON logging via AWS Lambda Powertools
 3. WHEN handling sensitive data, THE Control_Plane_API SHALL never log passwords, tokens, or personally identifiable information
-4. WHEN tracing requests, THE Control_Plane_API SHALL use AWS X-Ray for distributed tracing across all functions
+4. WHEN tracing requests, THE Control_Plane_API SHALL use AWS X-Ray for distributed tracing within the single function
 5. WHEN validating input data, THE Control_Plane_API SHALL use strict schemas and reject requests with unknown fields
 
 ### Requirement 8
 
-**User Story:** As a system architect, I want modular Lambda functions with bundled dependencies, so that the system follows single responsibility principles while maintaining optimal performance and simplified deployment.
+**User Story:** As a system architect, I want a single Lambda function with internal routing and bundled dependencies, so that the system is portable between Lambda and App Runner while maintaining optimal performance and simplified deployment.
 
 #### Acceptance Criteria
 
-1. WHEN implementing business logic, THE Control_Plane_API SHALL use separate Lambda functions for each API endpoint
-2. WHEN Lambda functions need common functionality, THE Control_Plane_API SHALL use shared lib/ utilities bundled with each function
-3. WHEN packaging dependencies, THE Control_Plane_API SHALL use esbuild to bundle all dependencies into each function for optimal performance
-4. WHEN deploying functions, THE Control_Plane_API SHALL support incremental deployment of individual functions without layer dependencies
-5. WHEN adding new endpoints, THE Control_Plane_API SHALL follow the established bundled patterns for consistency and maintainability
+1. WHEN implementing the API, THE Control_Plane_API SHALL use a single Lambda function with Node.js-based internal routing for all endpoints
+2. WHEN routing requests, THE Internal_Router SHALL handle all API endpoints within the single function without external dependencies
+3. WHEN packaging dependencies, THE Control_Plane_API SHALL use esbuild to bundle all dependencies into the single function for optimal performance
+4. WHEN deploying the function, THE Control_Plane_API SHALL support deployment to both AWS Lambda and AWS App Runner without code changes
+5. WHEN adding new endpoints, THE Control_Plane_API SHALL extend the internal routing system while maintaining the single-function architecture
 
 ### Requirement 9
 
@@ -128,12 +128,12 @@ The AWS Lambda Control Plane API is a serverless "control plane" for an ERP prov
 
 ### Requirement 10
 
-**User Story:** As an operations engineer, I want comprehensive observability and performance monitoring, so that I can maintain system reliability and meet performance targets.
+**User Story:** As an operations engineer, I want comprehensive observability and performance monitoring within the single Lambda function, so that I can maintain system reliability and meet performance targets.
 
 #### Acceptance Criteria
 
-1. WHEN processing API requests, THE Control_Plane_API SHALL achieve p50 ≤ 300ms and p95 ≤ 500ms response times for warm paths
-2. WHEN cold starts occur, THE Control_Plane_API SHALL target p95 ≤ 1200ms for critical user-facing endpoints
-3. WHEN collecting metrics, THE Control_Plane_API SHALL track latency, error counts, and authentication failures using AWS Lambda Powertools
-4. WHEN logging operations, THE Control_Plane_API SHALL include correlation IDs and request IDs for request tracing
-5. WHEN performance degrades, THE Control_Plane_API SHALL provide structured logs and traces for effective troubleshooting
+1. WHEN processing API requests, THE Control_Plane_API SHALL achieve p50 ≤ 300ms and p95 ≤ 500ms response times for warm paths within the single function
+2. WHEN cold starts occur, THE Control_Plane_API SHALL target p95 ≤ 1200ms for the single function initialization
+3. WHEN collecting metrics, THE Control_Plane_API SHALL track latency, error counts, and authentication failures using AWS Lambda Powertools within the single function
+4. WHEN logging operations, THE Control_Plane_API SHALL include correlation IDs and request IDs for request tracing within the single function
+5. WHEN performance degrades, THE Control_Plane_API SHALL provide structured logs and traces for effective troubleshooting of the single function

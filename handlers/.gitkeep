@@ -1,0 +1,4 @@
+# This directory will contain route handlers organized by domain
+# - auth/ - Authentication handlers (login, password reset)
+# - staff/ - Staff management handlers (register, enable, disable, me)
+# - tenant/ - Tenant handlers (register)

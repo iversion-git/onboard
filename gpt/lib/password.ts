@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 
-export async function hashPassword(plain: string, rounds = 12): Promise<string> {
+export async function hashPassword(plain: string, rounds = 8): Promise<string> {
   const salt = await bcrypt.genSalt(rounds);
   return bcrypt.hash(plain, salt);
 }
