@@ -70,7 +70,7 @@ This implementation plan converts the AWS Lambda Control Plane API from a multi-
   - **Property 2: Invalid authentication rejection**
   - **Validates: Requirements 1.2, 1.3**
 
-- [ ] 6. Implement authorization middleware and role enforcement
+- [x] 6. Implement authorization middleware and role enforcement
   - Create authorization middleware for role-based access control within the single function
   - Build context passing system for staff identity and roles
   - Set up role enforcement for different endpoint requirements
@@ -81,7 +81,7 @@ This implementation plan converts the AWS Lambda Control Plane API from a multi-
   - **Property 3: Authorization enforcement**
   - **Validates: Requirements 2.2, 4.2, 6.4**
 
-- [ ] 7. Implement DynamoDB data models and access patterns
+- [-] 7. Implement DynamoDB data models and access patterns
   - Create Staff table schema with EmailIndex GSI
   - Implement PasswordResetTokens table with TTL configuration
   - Create Tenants table schema

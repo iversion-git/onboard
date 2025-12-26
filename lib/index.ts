@@ -8,6 +8,7 @@ export * from './request.js';
 export * from './response.js';
 export * from './router.js';
 export * from './setup.js';
+export * from './permissions.js';
 
 // AWS Integrations and bundled dependencies (selective exports to avoid conflicts)
 export { 
@@ -34,6 +35,17 @@ export {
   type JWTTokenPayload,
   type AppConfig
 } from './aws-integrations.js';
+
+// Permission utilities
+export {
+  PermissionChecker,
+  ROLE_HIERARCHY,
+  ENDPOINT_PERMISSIONS,
+  checkEndpointPermission,
+  requireEndpointPermission,
+  type Role,
+  type PermissionCheckResult
+} from './permissions.js';
 
 // Convenience re-exports for common patterns
 export { getLogger, log, createRequestLogger, createAuditLogger } from './logging.js';
