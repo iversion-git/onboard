@@ -435,6 +435,58 @@ export class DynamoDBHelper {
     }
   }
 
+  async updateStaffPassword(staffId: string, passwordHash: string, correlationId?: string): Promise<DatabaseOperationResult<StaffRecord>> {
+    try {
+      const updates = {
+        password_hash: passwordHash,
+        updated_at: new Date().toISOString(),
+      };
+
+      const updateExpression = 'SET password_hash = :password_hash, updated_at = :updated_at';
+      const expressionAttributeValues = {
+        ':password_hash': updates.password_hash,
+        ':updated_at': updates.updated_at,
+      };
+
+      const result = await this.updateItem(
+        this.tables.staff,
+        { staff_id: staffId },
+        updateExpression,
+        expressionAttributeValues,
+        undefined,
+        correlationId
+      );
+
+      if (!result) {
+        throw createApiError('NotFound', 'Staff member not found');
+      }
+
+      // Validate the updated record
+      const validationResult = StaffRecordSchema.safeParse(result);
+      if (!validationResult.success) {
+        logger.error('Invalid staff record after password update', { 
+          staffId, 
+          errors: validationResult.error.errors,
+          correlationId 
+        });
+        throw createApiError('InternalError', 'Invalid staff record after password update');
+      }
+
+      return { 
+        success: true, 
+        data: validationResult.data,
+        correlationId 
+      };
+    } catch (error) {
+      logger.error('Failed to update staff password', { 
+        staffId, 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        correlationId 
+      });
+      throw error;
+    }
+  }
+
   // Password reset token data access methods
   async getPasswordResetToken(tokenHash: string, correlationId?: string): Promise<PasswordResetTokenQueryResult> {
     try {
@@ -709,6 +761,8 @@ export const dynamoDBHelper = {
     dynamoDBHelper.instance.createStaff(staffData, correlationId),
   updateStaff: (staffId: string, updates: StaffUpdate, correlationId?: string) => 
     dynamoDBHelper.instance.updateStaff(staffId, updates, correlationId),
+  updateStaffPassword: (staffId: string, passwordHash: string, correlationId?: string) => 
+    dynamoDBHelper.instance.updateStaffPassword(staffId, passwordHash, correlationId),
   
   // Password reset token methods
   getPasswordResetToken: (tokenHash: string, correlationId?: string) => 

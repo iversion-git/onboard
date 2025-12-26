@@ -145,6 +145,7 @@ export const isJWTPayload = (obj: any): obj is JWTPayload => {
 
 // Utility types for partial updates
 export type StaffUpdate = Partial<Pick<StaffRecord, 'roles' | 'enabled' | 'updated_at'>>;
+export type StaffPasswordUpdate = Partial<Pick<StaffRecord, 'password_hash' | 'updated_at'>>;
 export type TenantUpdate = Partial<Pick<TenantRecord, 'name' | 'email' | 'contact_info' | 'status' | 'updated_at'>>;
 
 // Database operation result types

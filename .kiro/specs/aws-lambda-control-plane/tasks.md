@@ -92,7 +92,7 @@ This implementation plan converts the AWS Lambda Control Plane API from a multi-
   - **Property 9: Duplicate prevention**
   - **Validates: Requirements 2.5, 4.5**
 
-- [ ] 8. Build authentication route handlers
+- [x] 8. Build authentication route handlers
   - Implement POST /auth/login handler with credential validation and JWT generation
   - Create POST /auth/password-reset/request handler with token generation and SES integration
   - Build POST /auth/password-reset/confirm handler with token validation and password update
@@ -103,7 +103,7 @@ This implementation plan converts the AWS Lambda Control Plane API from a multi-
   - **Property 4: Password reset round trip**
   - **Validates: Requirements 3.1, 3.3**
 
-- [ ] 9. Checkpoint - Ensure all tests pass
+- [-] 9. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 10. Implement staff management route handlers

@@ -1,15 +1,13 @@
 // Main Lambda handler entry point with internal routing
 import type { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import { createRouterForEnvironment } from './lib/setup.js';
+import { registerAuthRoutes } from './routes/auth.js';
 
 // Create router instance with environment-specific configuration
 const router = createRouterForEnvironment();
 
-// TODO: Route handlers will be registered in later tasks
-// Example of how routes will be registered:
-// router.get('/health', async (req, res) => {
-//   res.json({ status: 'healthy', timestamp: new Date().toISOString() });
-// });
+// Register authentication routes
+registerAuthRoutes(router);
 
 // Main Lambda handler
 export const handler = async (
