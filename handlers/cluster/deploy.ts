@@ -5,6 +5,7 @@ import { getCloudFormationHelper } from '../../lib/cloudformation.js';
 import { getS3TemplateManager } from '../../lib/s3-templates.js';
 import { getCrossAccountRoleManager } from '../../lib/cross-account-roles.js';
 import { getConfig } from '../../lib/config.js';
+import { calculateSubnetCIDRs } from '../../lib/cidr-utils.js';
 import { logger } from '../../lib/logging.js';
 import { sendError } from '../../lib/response.js';
 import { z } from 'zod';
@@ -111,13 +112,25 @@ export const deployHandler: RouteHandler = async (req, res) => {
       // Prepare CloudFormation deployment configuration
       const stackName = `control-plane-${cluster.name}-${clusterId.substring(0, 8)}`;
       
+      // Calculate subnet CIDRs from VPC CIDR
+      const subnets = calculateSubnetCIDRs(cluster.cidr);
+      
       // Default parameters for cluster deployment
       const defaultParameters = [
-        { ParameterKey: 'ClusterName', ParameterValue: cluster.name },
-        { ParameterKey: 'ClusterType', ParameterValue: cluster.type },
-        { ParameterKey: 'Region', ParameterValue: cluster.region },
-        { ParameterKey: 'CIDR', ParameterValue: cluster.cidr },
-        { ParameterKey: 'ClusterId', ParameterValue: cluster.cluster_id },
+        { ParameterKey: 'EnvironmentName', ParameterValue: cluster.name },
+        { ParameterKey: 'VpcCIDR', ParameterValue: cluster.cidr },
+        // Public subnet CIDRs
+        { ParameterKey: 'PublicSubnet1CIDR', ParameterValue: subnets.public[0] },
+        { ParameterKey: 'PublicSubnet2CIDR', ParameterValue: subnets.public[1] },
+        { ParameterKey: 'PublicSubnet3CIDR', ParameterValue: subnets.public[2] },
+        // Private App subnet CIDRs
+        { ParameterKey: 'PrivateAppSubnet1CIDR', ParameterValue: subnets.privateApp[0] },
+        { ParameterKey: 'PrivateAppSubnet2CIDR', ParameterValue: subnets.privateApp[1] },
+        { ParameterKey: 'PrivateAppSubnet3CIDR', ParameterValue: subnets.privateApp[2] },
+        // Private DB subnet CIDRs
+        { ParameterKey: 'PrivateDBSubnet1CIDR', ParameterValue: subnets.privateDB[0] },
+        { ParameterKey: 'PrivateDBSubnet2CIDR', ParameterValue: subnets.privateDB[1] },
+        { ParameterKey: 'PrivateDBSubnet3CIDR', ParameterValue: subnets.privateDB[2] },
       ];
 
       const deploymentConfig = {
@@ -197,6 +210,10 @@ export const deployHandler: RouteHandler = async (req, res) => {
         stackId: deploymentResult.stackId,
         stackName,
         status: deploymentResult.status,
+        clusterName: cluster.name,
+        environment: cluster.environment,
+        vpcCidr: cluster.cidr,
+        calculatedSubnets: subnets,
       });
 
       // Return success response

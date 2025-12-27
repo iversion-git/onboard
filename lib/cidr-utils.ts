@@ -154,3 +154,80 @@ export const isIPInCIDR = (ip: string, cidr: string): boolean => {
     return false;
   }
 };
+
+/**
+ * Subnet configuration for cluster deployment
+ */
+export interface SubnetConfiguration {
+  public: string[];
+  privateApp: string[];
+  privateDB: string[];
+}
+
+/**
+ * Calculate subnet CIDRs from VPC CIDR for cluster deployment
+ * Generates /24 subnets with predefined patterns:
+ * - Public subnets: x.x.1.0/24, x.x.2.0/24, x.x.3.0/24
+ * - Private App subnets: x.x.11.0/24, x.x.12.0/24, x.x.13.0/24
+ * - Private DB subnets: x.x.21.0/24, x.x.22.0/24, x.x.23.0/24
+ */
+export const calculateSubnetCIDRs = (vpcCidr: string): SubnetConfiguration => {
+  try {
+    // Parse the VPC CIDR to get the base network
+    const [ip, prefixLength] = vpcCidr.split('/');
+    const prefixLen = parseInt(prefixLength, 10);
+    
+    // Ensure VPC CIDR is large enough to accommodate /24 subnets
+    if (prefixLen > 24) {
+      throw new Error(`VPC CIDR prefix length (/${prefixLen}) must be /24 or larger to accommodate /24 subnets`);
+    }
+    
+    // Get the first two octets from the VPC CIDR
+    const ipParts = ip.split('.');
+    const baseNetwork = `${ipParts[0]}.${ipParts[1]}`;
+    
+    // Generate subnet CIDRs with /24 prefix
+    const subnets: SubnetConfiguration = {
+      public: [
+        `${baseNetwork}.1.0/24`,
+        `${baseNetwork}.2.0/24`,
+        `${baseNetwork}.3.0/24`
+      ],
+      privateApp: [
+        `${baseNetwork}.11.0/24`,
+        `${baseNetwork}.12.0/24`,
+        `${baseNetwork}.13.0/24`
+      ],
+      privateDB: [
+        `${baseNetwork}.21.0/24`,
+        `${baseNetwork}.22.0/24`,
+        `${baseNetwork}.23.0/24`
+      ]
+    };
+    
+    // Validate that all generated subnets are within the VPC CIDR
+    const allSubnets = [...subnets.public, ...subnets.privateApp, ...subnets.privateDB];
+    for (const subnet of allSubnets) {
+      const subnetNetwork = parseCIDR(subnet).network;
+      const vpcNetwork = parseCIDR(vpcCidr).network;
+      const vpcMask = parseCIDR(vpcCidr).mask;
+      
+      if ((subnetNetwork & vpcMask) !== vpcNetwork) {
+        throw new Error(`Generated subnet ${subnet} is not within VPC CIDR ${vpcCidr}`);
+      }
+    }
+    
+    logger.info('Calculated subnet CIDRs for cluster deployment', {
+      vpcCidr,
+      subnets
+    });
+    
+    return subnets;
+  } catch (error) {
+    logger.error('Error calculating subnet CIDRs', {
+      vpcCidr,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    throw error;
+  }
+};

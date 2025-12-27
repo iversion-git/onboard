@@ -74,15 +74,15 @@ export class S3TemplateManager {
   private client: S3Client;
   private config: ReturnType<typeof getConfig>;
   private bucketName: string;
+  private region: string;
 
   constructor(bucketName: string, region?: string) {
     this.config = getConfig();
     this.bucketName = bucketName;
-    
-    const clientRegion = region || this.config.aws.region;
+    this.region = region || this.config.aws.region;
     
     this.client = new S3Client({
-      region: clientRegion,
+      region: this.region,
       maxAttempts: 3
     });
   }
@@ -112,7 +112,7 @@ export class S3TemplateManager {
 
       const response = await this.client.send(command);
       
-      const templateUrl = `https://${validatedConfig.bucketName}.s3.${this.client.config.region}.amazonaws.com/${validatedConfig.key}`;
+      const templateUrl = `https://${validatedConfig.bucketName}.s3.${this.region}.amazonaws.com/${validatedConfig.key}`;
       
       logger.info('CloudFormation template uploaded successfully', {
         bucket: validatedConfig.bucketName,
@@ -219,7 +219,7 @@ export class S3TemplateManager {
               // Parse template metadata from S3 object metadata
               const templateMetadata = this.parseTemplateMetadata(headResponse.Metadata || {});
               
-              const templateUrl = `https://${this.bucketName}.s3.${this.client.config.region}.amazonaws.com/${object.Key}`;
+              const templateUrl = `https://${this.bucketName}.s3.${this.region}.amazonaws.com/${object.Key}`;
               
               templates.push({
                 key: object.Key,
@@ -274,7 +274,7 @@ export class S3TemplateManager {
       const response = await this.client.send(command);
       
       const templateMetadata = this.parseTemplateMetadata(response.Metadata || {});
-      const templateUrl = `https://${this.bucketName}.s3.${this.client.config.region}.amazonaws.com/${key}`;
+      const templateUrl = `https://${this.bucketName}.s3.${this.region}.amazonaws.com/${key}`;
       
       return {
         key,

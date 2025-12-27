@@ -42,6 +42,7 @@ export interface ClusterRecord {
   cluster_id: string;         // PK
   name: string;
   type: 'dedicated' | 'shared';
+  environment: 'Production' | 'Staging' | 'Dev';  // New field for environment type
   region: string;             // AWS region
   cidr: string;               // Network CIDR block
   status: 'created' | 'deploying' | 'deployed' | 'failed';
@@ -110,6 +111,7 @@ export const ClusterRecordSchema = z.object({
   cluster_id: z.string().uuid(),
   name: z.string().min(1).max(255),
   type: z.enum(['dedicated', 'shared']),
+  environment: z.enum(['Production', 'Staging', 'Dev']),
   region: z.enum(AWS_REGIONS),
   cidr: z.string().refine(validateCIDR, {
     message: 'CIDR must be a valid private IPv4 CIDR block (RFC 1918)'
@@ -158,6 +160,7 @@ export const CreateTenantSchema = z.object({
 export const CreateClusterSchema = z.object({
   name: z.string().min(1).max(255),
   type: z.enum(['dedicated', 'shared']),
+  environment: z.enum(['Production', 'Staging', 'Dev']),
   region: z.enum(AWS_REGIONS),
   cidr: z.string().refine(validateCIDR, {
     message: 'CIDR must be a valid private IPv4 CIDR block (RFC 1918)'
@@ -166,6 +169,7 @@ export const CreateClusterSchema = z.object({
 
 export const UpdateClusterSchema = z.object({
   name: z.string().min(1).max(255).optional(),
+  environment: z.enum(['Production', 'Staging', 'Dev']).optional(),
   status: z.enum(['created', 'deploying', 'deployed', 'failed']).optional(),
   deployment_status: z.string().optional(),
   deployment_id: z.string().optional(),
@@ -212,7 +216,7 @@ export const isJWTPayload = (obj: any): obj is JWTPayload => {
 export type StaffUpdate = Partial<Pick<StaffRecord, 'roles' | 'enabled' | 'updated_at'>>;
 export type StaffPasswordUpdate = Partial<Pick<StaffRecord, 'password_hash' | 'updated_at'>>;
 export type TenantUpdate = Partial<Pick<TenantRecord, 'name' | 'email' | 'contact_info' | 'status' | 'updated_at'>>;
-export type ClusterUpdate = Partial<Pick<ClusterRecord, 'name' | 'status' | 'deployment_status' | 'deployment_id' | 'stack_outputs' | 'deployed_at' | 'updated_at'>>;
+export type ClusterUpdate = Partial<Pick<ClusterRecord, 'name' | 'environment' | 'status' | 'deployment_status' | 'deployment_id' | 'stack_outputs' | 'deployed_at' | 'updated_at'>>;
 
 // Database operation result types
 export interface DatabaseOperationResult<T> {
@@ -261,7 +265,9 @@ export {
   checkCIDROverlap, 
   validateCIDRWithOverlapCheck, 
   getCIDRInfo, 
-  isIPInCIDR 
+  isIPInCIDR,
+  calculateSubnetCIDRs,
+  type SubnetConfiguration
 } from './cidr-utils.js';
 
 // Export AWS regions for external use

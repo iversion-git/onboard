@@ -1,0 +1,1541 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Multi-tier VPC network infrastructure for API services.
+  Creates a three-zone architecture (Public, Private App, Private DB) with configurable
+  parameters for flexibility across different deployment scenarios.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Environment Configuration"
+        Parameters:
+          - EnvironmentName
+      - Label:
+          default: "Network Configuration"
+        Parameters:
+          - VpcCIDR
+          - AvailabilityZoneCount
+          - NATGatewayDeployment
+      - Label:
+          default: "Public Zone Subnets"
+        Parameters:
+          - PublicSubnet1CIDR
+          - PublicSubnet2CIDR
+          - PublicSubnet3CIDR
+      - Label:
+          default: "Private App Zone Subnets"
+        Parameters:
+          - PrivateAppSubnet1CIDR
+          - PrivateAppSubnet2CIDR
+          - PrivateAppSubnet3CIDR
+      - Label:
+          default: "Private DB Zone Subnets"
+        Parameters:
+          - PrivateDBSubnet1CIDR
+          - PrivateDBSubnet2CIDR
+          - PrivateDBSubnet3CIDR
+      - Label:
+          default: "DNS Configuration"
+        Parameters:
+          - CustomDNSServers
+      - Label:
+          default: "Resource Tagging"
+        Parameters:
+          - ProjectName
+          - CostCenter
+          - Owner
+    ParameterLabels:
+      EnvironmentName:
+        default: "Environment Name"
+      VpcCIDR:
+        default: "VPC CIDR Block"
+      AvailabilityZoneCount:
+        default: "Number of Availability Zones"
+      NATGatewayDeployment:
+        default: "NAT Gateway Deployment Strategy"
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Description: Environment identifier (e.g., prod, staging, dev)
+    MinLength: 1
+    MaxLength: 50
+    AllowedPattern: ^[a-zA-Z][a-zA-Z0-9-]*$
+    ConstraintDescription: Must begin with a letter and contain only alphanumeric characters and hyphens
+
+  VpcCIDR:
+    Type: String
+    Description: CIDR block for the VPC
+    Default: 10.0.0.0/16
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be a valid CIDR block in the format x.x.x.x/x
+
+  AvailabilityZoneCount:
+    Type: Number
+    Description: Number of Availability Zones to use (1, 2, or 3)
+    Default: 2
+    AllowedValues:
+      - 1
+      - 2
+      - 3
+    ConstraintDescription: Must be 1, 2, or 3
+
+  NATGatewayDeployment:
+    Type: String
+    Description: NAT Gateway deployment strategy (SingleAZ for one NAT Gateway, MultiAZ for one per AZ)
+    Default: SingleAZ
+    AllowedValues:
+      - SingleAZ
+      - MultiAZ
+    ConstraintDescription: Must be either SingleAZ or MultiAZ
+
+  PublicSubnet1CIDR:
+    Type: String
+    Description: CIDR block for Public Subnet in Availability Zone 1
+    Default: 10.0.1.0/24
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be a valid CIDR block in the format x.x.x.x/x
+
+  PublicSubnet2CIDR:
+    Type: String
+    Description: CIDR block for Public Subnet in Availability Zone 2
+    Default: 10.0.2.0/24
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be a valid CIDR block in the format x.x.x.x/x
+
+  PublicSubnet3CIDR:
+    Type: String
+    Description: CIDR block for Public Subnet in Availability Zone 3
+    Default: 10.0.3.0/24
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be a valid CIDR block in the format x.x.x.x/x
+
+  PrivateAppSubnet1CIDR:
+    Type: String
+    Description: CIDR block for Private App Subnet in Availability Zone 1
+    Default: 10.0.11.0/24
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be a valid CIDR block in the format x.x.x.x/x
+
+  PrivateAppSubnet2CIDR:
+    Type: String
+    Description: CIDR block for Private App Subnet in Availability Zone 2
+    Default: 10.0.12.0/24
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be a valid CIDR block in the format x.x.x.x/x
+
+  PrivateAppSubnet3CIDR:
+    Type: String
+    Description: CIDR block for Private App Subnet in Availability Zone 3
+    Default: 10.0.13.0/24
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be a valid CIDR block in the format x.x.x.x/x
+
+  PrivateDBSubnet1CIDR:
+    Type: String
+    Description: CIDR block for Private DB Subnet in Availability Zone 1
+    Default: 10.0.21.0/24
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be a valid CIDR block in the format x.x.x.x/x
+
+  PrivateDBSubnet2CIDR:
+    Type: String
+    Description: CIDR block for Private DB Subnet in Availability Zone 2
+    Default: 10.0.22.0/24
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be a valid CIDR block in the format x.x.x.x/x
+
+  PrivateDBSubnet3CIDR:
+    Type: String
+    Description: CIDR block for Private DB Subnet in Availability Zone 3
+    Default: 10.0.23.0/24
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be a valid CIDR block in the format x.x.x.x/x
+
+  CustomDNSServers:
+    Type: CommaDelimitedList
+    Description: Optional comma-delimited list of custom DNS server IP addresses (leave empty to use AWS default DNS)
+    Default: ""
+
+  ProjectName:
+    Type: String
+    Description: Optional project name for resource tagging
+    Default: ""
+    MaxLength: 100
+
+  CostCenter:
+    Type: String
+    Description: Optional cost center identifier for resource tagging
+    Default: ""
+    MaxLength: 100
+
+  Owner:
+    Type: String
+    Description: Optional owner or team name for resource tagging
+    Default: ""
+    MaxLength: 100
+
+Conditions:
+  # Condition to determine if we should use Availability Zone 2
+  UseAZ2: !Or
+    - !Equals [!Ref AvailabilityZoneCount, 2]
+    - !Equals [!Ref AvailabilityZoneCount, 3]
+  
+  # Condition to determine if we should use Availability Zone 3
+  UseAZ3: !Equals [!Ref AvailabilityZoneCount, 3]
+  
+  # Condition to determine if we should deploy NAT Gateways in multiple AZs
+  UseMultiAZNAT: !Equals [!Ref NATGatewayDeployment, 'MultiAZ']
+  
+  # Condition to determine if we should deploy a single NAT Gateway
+  UseSingleAZNAT: !Equals [!Ref NATGatewayDeployment, 'SingleAZ']
+  
+  # Condition to determine if custom DNS servers are provided
+  HasCustomDNS: !Not [!Equals [!Join ['', !Ref CustomDNSServers], '']]
+  
+  # Conditions for optional custom tags
+  HasProjectName: !Not [!Equals [!Ref ProjectName, '']]
+  HasCostCenter: !Not [!Equals [!Ref CostCenter, '']]
+  HasOwner: !Not [!Equals [!Ref Owner, '']]
+  
+  # Combined conditions for NAT Gateway deployment in specific AZs
+  DeployNATGatewayAZ1: !Or
+    - !Condition UseSingleAZNAT
+    - !Condition UseMultiAZNAT
+  
+  DeployNATGatewayAZ2: !And
+    - !Condition UseAZ2
+    - !Condition UseMultiAZNAT
+  
+  DeployNATGatewayAZ3: !And
+    - !Condition UseAZ3
+    - !Condition UseMultiAZNAT
+
+Resources:
+  # ==========================================
+  # VPC and Core Networking
+  # ==========================================
+  
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-VPC
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: CloudFormation
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  DHCPOptions:
+    Type: AWS::EC2::DHCPOptions
+    Properties:
+      DomainNameServers: !If
+        - HasCustomDNS
+        - !Ref CustomDNSServers
+        - - AmazonProvidedDNS
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-DHCPOptions
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: CloudFormation
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  DHCPOptionsAssociation:
+    Type: AWS::EC2::VPCDHCPOptionsAssociation
+    Properties:
+      VpcId: !Ref VPC
+      DhcpOptionsId: !Ref DHCPOptions
+
+  # ==========================================
+  # Internet Gateway
+  # ==========================================
+  
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-InternetGateway
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: CloudFormation
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  # ==========================================
+  # Public Zone Subnets
+  # ==========================================
+  
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicSubnet1CIDR
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-PublicSubnet-AZ1
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Zone
+          Value: Public
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Condition: UseAZ2
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicSubnet2CIDR
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-PublicSubnet-AZ2
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Zone
+          Value: Public
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  PublicSubnet3:
+    Type: AWS::EC2::Subnet
+    Condition: UseAZ3
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicSubnet3CIDR
+      AvailabilityZone: !Select [2, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-PublicSubnet-AZ3
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Zone
+          Value: Public
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  # ==========================================
+  # Public Zone Route Table
+  # ==========================================
+  
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-PublicRouteTable
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Zone
+          Value: Public
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: UseAZ2
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnet3RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: UseAZ3
+    Properties:
+      SubnetId: !Ref PublicSubnet3
+      RouteTableId: !Ref PublicRouteTable
+
+  # ==========================================
+  # NAT Gateway Infrastructure
+  # ==========================================
+  
+  # Elastic IP for NAT Gateway in AZ1
+  NATGatewayEIP1:
+    Type: AWS::EC2::EIP
+    Condition: DeployNATGatewayAZ1
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-NATGatewayEIP-AZ1
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: CloudFormation
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  # Elastic IP for NAT Gateway in AZ2
+  NATGatewayEIP2:
+    Type: AWS::EC2::EIP
+    Condition: DeployNATGatewayAZ2
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-NATGatewayEIP-AZ2
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: CloudFormation
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  # Elastic IP for NAT Gateway in AZ3
+  NATGatewayEIP3:
+    Type: AWS::EC2::EIP
+    Condition: DeployNATGatewayAZ3
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-NATGatewayEIP-AZ3
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: CloudFormation
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  # NAT Gateway in AZ1 (always deployed for SingleAZ or MultiAZ)
+  NATGateway1:
+    Type: AWS::EC2::NatGateway
+    Condition: DeployNATGatewayAZ1
+    Properties:
+      AllocationId: !GetAtt NATGatewayEIP1.AllocationId
+      SubnetId: !Ref PublicSubnet1
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-NATGateway-AZ1
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: CloudFormation
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  # NAT Gateway in AZ2 (only deployed for MultiAZ when AZ2 is used)
+  NATGateway2:
+    Type: AWS::EC2::NatGateway
+    Condition: DeployNATGatewayAZ2
+    Properties:
+      AllocationId: !GetAtt NATGatewayEIP2.AllocationId
+      SubnetId: !Ref PublicSubnet2
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-NATGateway-AZ2
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: CloudFormation
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  # NAT Gateway in AZ3 (only deployed for MultiAZ when AZ3 is used)
+  NATGateway3:
+    Type: AWS::EC2::NatGateway
+    Condition: DeployNATGatewayAZ3
+    Properties:
+      AllocationId: !GetAtt NATGatewayEIP3.AllocationId
+      SubnetId: !Ref PublicSubnet3
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-NATGateway-AZ3
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: CloudFormation
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  # ==========================================
+  # Private App Zone Subnets
+  # ==========================================
+  
+  PrivateAppSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateAppSubnet1CIDR
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-PrivateAppSubnet-AZ1
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Zone
+          Value: PrivateApp
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  PrivateAppSubnet2:
+    Type: AWS::EC2::Subnet
+    Condition: UseAZ2
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateAppSubnet2CIDR
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-PrivateAppSubnet-AZ2
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Zone
+          Value: PrivateApp
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  PrivateAppSubnet3:
+    Type: AWS::EC2::Subnet
+    Condition: UseAZ3
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateAppSubnet3CIDR
+      AvailabilityZone: !Select [2, !GetAZs '']
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-PrivateAppSubnet-AZ3
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Zone
+          Value: PrivateApp
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  # ==========================================
+  # Private App Zone Route Tables
+  # ==========================================
+  
+  # Route table for AZ1 (always created)
+  PrivateAppRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-PrivateAppRouteTable-AZ1
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Zone
+          Value: PrivateApp
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  # Route table for AZ2 (only created for MultiAZ NAT when AZ2 is used)
+  PrivateAppRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Condition: DeployNATGatewayAZ2
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-PrivateAppRouteTable-AZ2
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Zone
+          Value: PrivateApp
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  # Route table for AZ3 (only created for MultiAZ NAT when AZ3 is used)
+  PrivateAppRouteTable3:
+    Type: AWS::EC2::RouteTable
+    Condition: DeployNATGatewayAZ3
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-PrivateAppRouteTable-AZ3
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Zone
+          Value: PrivateApp
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  # ==========================================
+  # Private App Zone Routes to NAT Gateways
+  # ==========================================
+  
+  # Route to NAT Gateway for AZ1
+  PrivateAppRoute1:
+    Type: AWS::EC2::Route
+    Condition: DeployNATGatewayAZ1
+    Properties:
+      RouteTableId: !Ref PrivateAppRouteTable1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NATGateway1
+
+  # Route to NAT Gateway for AZ2
+  PrivateAppRoute2:
+    Type: AWS::EC2::Route
+    Condition: DeployNATGatewayAZ2
+    Properties:
+      RouteTableId: !Ref PrivateAppRouteTable2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NATGateway2
+
+  # Route to NAT Gateway for AZ3
+  PrivateAppRoute3:
+    Type: AWS::EC2::Route
+    Condition: DeployNATGatewayAZ3
+    Properties:
+      RouteTableId: !Ref PrivateAppRouteTable3
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NATGateway3
+
+  # ==========================================
+  # Private App Zone Subnet Route Table Associations
+  # ==========================================
+  
+  # Associate PrivateAppSubnet1 with appropriate route table
+  PrivateAppSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateAppSubnet1
+      RouteTableId: !Ref PrivateAppRouteTable1
+
+  # Associate PrivateAppSubnet2 with appropriate route table
+  # For SingleAZ NAT: use PrivateAppRouteTable1
+  # For MultiAZ NAT: use PrivateAppRouteTable2
+  PrivateAppSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: UseAZ2
+    Properties:
+      SubnetId: !Ref PrivateAppSubnet2
+      RouteTableId: !If
+        - UseMultiAZNAT
+        - !Ref PrivateAppRouteTable2
+        - !Ref PrivateAppRouteTable1
+
+  # Associate PrivateAppSubnet3 with appropriate route table
+  # For SingleAZ NAT: use PrivateAppRouteTable1
+  # For MultiAZ NAT: use PrivateAppRouteTable3
+  PrivateAppSubnet3RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: UseAZ3
+    Properties:
+      SubnetId: !Ref PrivateAppSubnet3
+      RouteTableId: !If
+        - UseMultiAZNAT
+        - !Ref PrivateAppRouteTable3
+        - !Ref PrivateAppRouteTable1
+
+  # ==========================================
+  # Private DB Zone Subnets
+  # ==========================================
+  
+  PrivateDBSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateDBSubnet1CIDR
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-PrivateDBSubnet-AZ1
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Zone
+          Value: PrivateDB
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  PrivateDBSubnet2:
+    Type: AWS::EC2::Subnet
+    Condition: UseAZ2
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateDBSubnet2CIDR
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-PrivateDBSubnet-AZ2
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Zone
+          Value: PrivateDB
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  PrivateDBSubnet3:
+    Type: AWS::EC2::Subnet
+    Condition: UseAZ3
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateDBSubnet3CIDR
+      AvailabilityZone: !Select [2, !GetAZs '']
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-PrivateDBSubnet-AZ3
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Zone
+          Value: PrivateDB
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  # ==========================================
+  # Private DB Zone Route Table
+  # ==========================================
+  
+  PrivateDBRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-PrivateDBRouteTable
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Zone
+          Value: PrivateDB
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  # ==========================================
+  # Private DB Zone Subnet Route Table Associations
+  # ==========================================
+  
+  PrivateDBSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateDBSubnet1
+      RouteTableId: !Ref PrivateDBRouteTable
+
+  PrivateDBSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: UseAZ2
+    Properties:
+      SubnetId: !Ref PrivateDBSubnet2
+      RouteTableId: !Ref PrivateDBRouteTable
+
+  PrivateDBSubnet3RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: UseAZ3
+    Properties:
+      SubnetId: !Ref PrivateDBSubnet3
+      RouteTableId: !Ref PrivateDBRouteTable
+
+  # ==========================================
+  # Security Groups
+  # ==========================================
+  
+  # ALB Security Group for Public Zone
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${EnvironmentName}-ALBSecurityGroup
+      GroupDescription: Security group for Application Load Balancers in Public Zone
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        # Allow HTTPS traffic from CloudFront
+        # Note: Using 0.0.0.0/0 for CloudFront. In production, consider:
+        # 1. Using AWS managed prefix list for CloudFront
+        # 2. Adding custom headers and validating them in ALB
+        # 3. Using AWS WAF for additional protection
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: Allow HTTPS from CloudFront IP ranges
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-ALBSecurityGroup
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Zone
+          Value: Public
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  # App Security Group for Private App Zone
+  AppSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${EnvironmentName}-AppSecurityGroup
+      GroupDescription: Security group for application workloads (ECS tasks, Lambda functions) in Private App Zone
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        # Allow HTTP traffic from ALB Security Group
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+          Description: Allow HTTP from ALB Security Group
+      SecurityGroupEgress:
+        # Allow HTTPS traffic to internet
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+          Description: Allow HTTPS to internet
+        # Allow HTTP traffic to internet
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: Allow HTTP to internet
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-AppSecurityGroup
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Zone
+          Value: PrivateApp
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  # DB Security Group for Private DB Zone (basic structure)
+  # Full inbound rules will be added in task 8.3
+  DBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${EnvironmentName}-DBSecurityGroup
+      GroupDescription: Security group for database resources (Aurora MySQL, ElastiCache Redis, Vault) in Private DB Zone
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-DBSecurityGroup
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Zone
+          Value: PrivateDB
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  # Outbound rule for App Security Group to DB Security Group (MySQL)
+  AppSecurityGroupEgressMySQL:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref AppSecurityGroup
+      IpProtocol: tcp
+      FromPort: 3306
+      ToPort: 3306
+      DestinationSecurityGroupId: !Ref DBSecurityGroup
+      Description: Allow MySQL to DB Security Group
+
+  # Outbound rule for App Security Group to DB Security Group (Redis)
+  AppSecurityGroupEgressRedis:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref AppSecurityGroup
+      IpProtocol: tcp
+      FromPort: 6379
+      ToPort: 6379
+      DestinationSecurityGroupId: !Ref DBSecurityGroup
+      Description: Allow Redis to DB Security Group
+
+  # Outbound rule for App Security Group to DB Security Group (Vault)
+  AppSecurityGroupEgressVault:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref AppSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8200
+      ToPort: 8200
+      DestinationSecurityGroupId: !Ref DBSecurityGroup
+      Description: Allow Vault to DB Security Group
+
+  # Outbound rule for ALB Security Group to App Security Group
+  ALBSecurityGroupEgressHTTP:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref ALBSecurityGroup
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+      DestinationSecurityGroupId: !Ref AppSecurityGroup
+      Description: Allow HTTP to App Security Group
+
+  # ==========================================
+  # DB Security Group Inbound Rules
+  # ==========================================
+  
+  # Inbound rule for DB Security Group from App Security Group (MySQL)
+  DBSecurityGroupIngressMySQL:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref DBSecurityGroup
+      IpProtocol: tcp
+      FromPort: 3306
+      ToPort: 3306
+      SourceSecurityGroupId: !Ref AppSecurityGroup
+      Description: Allow MySQL from App Security Group
+
+  # Inbound rule for DB Security Group from App Security Group (Redis)
+  DBSecurityGroupIngressRedis:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref DBSecurityGroup
+      IpProtocol: tcp
+      FromPort: 6379
+      ToPort: 6379
+      SourceSecurityGroupId: !Ref AppSecurityGroup
+      Description: Allow Redis from App Security Group
+
+  # Inbound rule for DB Security Group from App Security Group (Vault)
+  DBSecurityGroupIngressVault:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref DBSecurityGroup
+      IpProtocol: tcp
+      FromPort: 8200
+      ToPort: 8200
+      SourceSecurityGroupId: !Ref AppSecurityGroup
+      Description: Allow Vault from App Security Group
+
+Outputs:
+  # VPC Outputs
+  VPC:
+    Description: VPC ID
+    Value: !Ref VPC
+    Export:
+      Name: !Sub ${EnvironmentName}-VPC
+
+  VPCCidr:
+    Description: VPC CIDR block
+    Value: !GetAtt VPC.CidrBlock
+    Export:
+      Name: !Sub ${EnvironmentName}-VPC-CIDR
+
+  # Internet Gateway Output
+  InternetGateway:
+    Description: Internet Gateway ID
+    Value: !Ref InternetGateway
+    Export:
+      Name: !Sub ${EnvironmentName}-InternetGateway
+
+  # Public Zone Subnet Outputs
+  PublicSubnet1:
+    Description: Public Subnet in Availability Zone 1
+    Value: !Ref PublicSubnet1
+    Export:
+      Name: !Sub ${EnvironmentName}-PublicSubnet1
+
+  PublicSubnet2:
+    Condition: UseAZ2
+    Description: Public Subnet in Availability Zone 2
+    Value: !Ref PublicSubnet2
+    Export:
+      Name: !Sub ${EnvironmentName}-PublicSubnet2
+
+  PublicSubnet3:
+    Condition: UseAZ3
+    Description: Public Subnet in Availability Zone 3
+    Value: !Ref PublicSubnet3
+    Export:
+      Name: !Sub ${EnvironmentName}-PublicSubnet3
+
+  PublicSubnets:
+    Description: Comma-delimited list of Public Subnet IDs
+    Value: !If
+      - UseAZ3
+      - !Sub "${PublicSubnet1},${PublicSubnet2},${PublicSubnet3}"
+      - !If
+        - UseAZ2
+        - !Sub "${PublicSubnet1},${PublicSubnet2}"
+        - !Ref PublicSubnet1
+    Export:
+      Name: !Sub ${EnvironmentName}-PublicSubnets
+
+  # Public Zone Route Table Output
+  PublicRouteTable:
+    Description: Public Route Table ID
+    Value: !Ref PublicRouteTable
+    Export:
+      Name: !Sub ${EnvironmentName}-PublicRouteTable
+
+  # NAT Gateway Outputs
+  NATGateway1:
+    Condition: DeployNATGatewayAZ1
+    Description: NAT Gateway in Availability Zone 1
+    Value: !Ref NATGateway1
+    Export:
+      Name: !Sub ${EnvironmentName}-NATGateway1
+
+  NATGateway2:
+    Condition: DeployNATGatewayAZ2
+    Description: NAT Gateway in Availability Zone 2
+    Value: !Ref NATGateway2
+    Export:
+      Name: !Sub ${EnvironmentName}-NATGateway2
+
+  NATGateway3:
+    Condition: DeployNATGatewayAZ3
+    Description: NAT Gateway in Availability Zone 3
+    Value: !Ref NATGateway3
+    Export:
+      Name: !Sub ${EnvironmentName}-NATGateway3
+
+  NATGateways:
+    Description: Comma-delimited list of NAT Gateway IDs
+    Value: !If
+      - UseAZ3
+      - !If
+        - UseMultiAZNAT
+        - !Sub "${NATGateway1},${NATGateway2},${NATGateway3}"
+        - !Ref NATGateway1
+      - !If
+        - UseAZ2
+        - !If
+          - UseMultiAZNAT
+          - !Sub "${NATGateway1},${NATGateway2}"
+          - !Ref NATGateway1
+        - !Ref NATGateway1
+    Export:
+      Name: !Sub ${EnvironmentName}-NATGateways
+
+  # Private App Zone Subnet Outputs
+  PrivateAppSubnet1:
+    Description: Private App Subnet in Availability Zone 1
+    Value: !Ref PrivateAppSubnet1
+    Export:
+      Name: !Sub ${EnvironmentName}-PrivateAppSubnet1
+
+  PrivateAppSubnet2:
+    Condition: UseAZ2
+    Description: Private App Subnet in Availability Zone 2
+    Value: !Ref PrivateAppSubnet2
+    Export:
+      Name: !Sub ${EnvironmentName}-PrivateAppSubnet2
+
+  PrivateAppSubnet3:
+    Condition: UseAZ3
+    Description: Private App Subnet in Availability Zone 3
+    Value: !Ref PrivateAppSubnet3
+    Export:
+      Name: !Sub ${EnvironmentName}-PrivateAppSubnet3
+
+  PrivateAppSubnets:
+    Description: Comma-delimited list of Private App Subnet IDs
+    Value: !If
+      - UseAZ3
+      - !Sub "${PrivateAppSubnet1},${PrivateAppSubnet2},${PrivateAppSubnet3}"
+      - !If
+        - UseAZ2
+        - !Sub "${PrivateAppSubnet1},${PrivateAppSubnet2}"
+        - !Ref PrivateAppSubnet1
+    Export:
+      Name: !Sub ${EnvironmentName}-PrivateAppSubnets
+
+  # Private App Zone Route Table Outputs
+  PrivateAppRouteTable1:
+    Description: Private App Route Table for Availability Zone 1
+    Value: !Ref PrivateAppRouteTable1
+    Export:
+      Name: !Sub ${EnvironmentName}-PrivateAppRouteTable1
+
+  PrivateAppRouteTable2:
+    Condition: DeployNATGatewayAZ2
+    Description: Private App Route Table for Availability Zone 2
+    Value: !Ref PrivateAppRouteTable2
+    Export:
+      Name: !Sub ${EnvironmentName}-PrivateAppRouteTable2
+
+  PrivateAppRouteTable3:
+    Condition: DeployNATGatewayAZ3
+    Description: Private App Route Table for Availability Zone 3
+    Value: !Ref PrivateAppRouteTable3
+    Export:
+      Name: !Sub ${EnvironmentName}-PrivateAppRouteTable3
+
+  PrivateAppRouteTables:
+    Description: Comma-delimited list of Private App Route Table IDs
+    Value: !If
+      - UseAZ3
+      - !If
+        - UseMultiAZNAT
+        - !Sub "${PrivateAppRouteTable1},${PrivateAppRouteTable2},${PrivateAppRouteTable3}"
+        - !Ref PrivateAppRouteTable1
+      - !If
+        - UseAZ2
+        - !If
+          - UseMultiAZNAT
+          - !Sub "${PrivateAppRouteTable1},${PrivateAppRouteTable2}"
+          - !Ref PrivateAppRouteTable1
+        - !Ref PrivateAppRouteTable1
+    Export:
+      Name: !Sub ${EnvironmentName}-PrivateAppRouteTables
+
+  # Private DB Zone Subnet Outputs
+  PrivateDBSubnet1:
+    Description: Private DB Subnet in Availability Zone 1
+    Value: !Ref PrivateDBSubnet1
+    Export:
+      Name: !Sub ${EnvironmentName}-PrivateDBSubnet1
+
+  PrivateDBSubnet2:
+    Condition: UseAZ2
+    Description: Private DB Subnet in Availability Zone 2
+    Value: !Ref PrivateDBSubnet2
+    Export:
+      Name: !Sub ${EnvironmentName}-PrivateDBSubnet2
+
+  PrivateDBSubnet3:
+    Condition: UseAZ3
+    Description: Private DB Subnet in Availability Zone 3
+    Value: !Ref PrivateDBSubnet3
+    Export:
+      Name: !Sub ${EnvironmentName}-PrivateDBSubnet3
+
+  PrivateDBSubnets:
+    Description: Comma-delimited list of Private DB Subnet IDs
+    Value: !If
+      - UseAZ3
+      - !Sub "${PrivateDBSubnet1},${PrivateDBSubnet2},${PrivateDBSubnet3}"
+      - !If
+        - UseAZ2
+        - !Sub "${PrivateDBSubnet1},${PrivateDBSubnet2}"
+        - !Ref PrivateDBSubnet1
+    Export:
+      Name: !Sub ${EnvironmentName}-PrivateDBSubnets
+
+  # Private DB Zone Route Table Output
+  PrivateDBRouteTable:
+    Description: Private DB Route Table ID
+    Value: !Ref PrivateDBRouteTable
+    Export:
+      Name: !Sub ${EnvironmentName}-PrivateDBRouteTable
+
+  # Security Group Outputs
+  ALBSecurityGroup:
+    Description: ALB Security Group ID for Public Zone
+    Value: !Ref ALBSecurityGroup
+    Export:
+      Name: !Sub ${EnvironmentName}-ALBSecurityGroup
+
+  AppSecurityGroup:
+    Description: App Security Group ID for Private App Zone
+    Value: !Ref AppSecurityGroup
+    Export:
+      Name: !Sub ${EnvironmentName}-AppSecurityGroup
+
+  DBSecurityGroup:
+    Description: DB Security Group ID for Private DB Zone
+    Value: !Ref DBSecurityGroup
+    Export:
+      Name: !Sub ${EnvironmentName}-DBSecurityGroup
+
+  # Template metadata
+  TemplateVersion:
+    Description: CloudFormation template version
+    Value: "1.0.0"

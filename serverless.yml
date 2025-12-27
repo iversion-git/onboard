@@ -33,6 +33,17 @@ custom:
       staging: "https://staging.example.com"
       prod: "https://app.example.com"
     
+    # Cross-Account Deployment Configuration
+    crossAccount:
+      # List of AWS account IDs allowed for cross-account deployments
+      # Format: comma-separated string of 12-digit account IDs
+      allowedAccountIds: "078607863013"  # Your AWS account ID
+      rolePrefix: "ControlPlane-CrossAccount-Role"
+    
+    # S3 Configuration for CloudFormation Templates
+    s3:
+      templateBucket: "${self:service}-templates-${self:provider.stage}"
+    
     # Performance Monitoring Thresholds
     performance:
       p50ResponseTime: 300
@@ -87,6 +98,7 @@ provider:
     DYNAMODB_STAFF_TABLE: Staff-${self:provider.stage}
     DYNAMODB_PASSWORD_RESET_TOKENS_TABLE: PasswordResetTokens-${self:provider.stage}
     DYNAMODB_TENANTS_TABLE: Tenants-${self:provider.stage}
+    DYNAMODB_CLUSTERS_TABLE: Clusters-${self:provider.stage}
     # JWT secret from config (Requirements 9.6)
     JWT_SECRET: ${self:custom.config.jwtSecret}
     # SES configuration from config
@@ -95,6 +107,11 @@ provider:
     CORS_ORIGINS: ${self:custom.config.corsOrigins.${self:provider.stage}}
     # Security configuration
     BCRYPT_ROUNDS: "12"
+    # Cross-account deployment configuration
+    CLOUDFORMATION_ALLOWED_ACCOUNT_IDS: ${self:custom.config.crossAccount.allowedAccountIds}
+    CLOUDFORMATION_CROSS_ACCOUNT_ROLE_PREFIX: ${self:custom.config.crossAccount.rolePrefix}
+    # S3 template bucket for CloudFormation templates
+    S3_TEMPLATE_BUCKET: ${self:custom.config.s3.templateBucket}
   iam:
     role:
       statements:
@@ -112,6 +129,7 @@ provider:
             - arn:aws:dynamodb:${self:provider.region}:*:table/Staff-${self:provider.stage}/index/*
             - arn:aws:dynamodb:${self:provider.region}:*:table/PasswordResetTokens-${self:provider.stage}
             - arn:aws:dynamodb:${self:provider.region}:*:table/Tenants-${self:provider.stage}
+            - arn:aws:dynamodb:${self:provider.region}:*:table/Clusters-${self:provider.stage}
         # SES permissions with least-privilege access (Requirements 9.4)
         - Effect: Allow
           Action:
@@ -119,6 +137,33 @@ provider:
             - ses:SendRawEmail
           Resource: 
             - arn:aws:ses:${self:provider.region}:*:identity/*
+        # S3 permissions for CloudFormation template storage
+        - Effect: Allow
+          Action:
+            - s3:GetObject
+            - s3:PutObject
+            - s3:DeleteObject
+            - s3:ListBucket
+          Resource:
+            - arn:aws:s3:::${self:custom.config.s3.templateBucket}
+            - arn:aws:s3:::${self:custom.config.s3.templateBucket}/*
+        # CloudFormation permissions for cross-account deployments
+        - Effect: Allow
+          Action:
+            - cloudformation:CreateStack
+            - cloudformation:UpdateStack
+            - cloudformation:DeleteStack
+            - cloudformation:DescribeStacks
+            - cloudformation:DescribeStackEvents
+            - cloudformation:ListStacks
+            - cloudformation:ValidateTemplate
+          Resource: "*"
+        # STS permissions for cross-account role assumption
+        - Effect: Allow
+          Action:
+            - sts:AssumeRole
+            - sts:GetCallerIdentity
+          Resource: "*"
         # X-Ray tracing permissions for observability (Requirements 10.3, 10.4)
         - Effect: Allow
           Action:
@@ -280,6 +325,54 @@ resources:
           - Key: Architecture
             Value: single-function
 
+    # Clusters Table
+    ClustersTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: Clusters-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: cluster_id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: cluster_id
+            KeyType: HASH
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        SSESpecification:
+          SSEEnabled: true
+        Tags:
+          - Key: Service
+            Value: ${self:service}
+          - Key: Stage
+            Value: ${self:provider.stage}
+          - Key: Architecture
+            Value: single-function
+
+    # S3 Bucket for CloudFormation Templates
+    TemplatesBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:custom.config.s3.templateBucket}
+        VersioningConfiguration:
+          Status: Enabled
+        BucketEncryption:
+          ServerSideEncryptionConfiguration:
+            - ServerSideEncryptionByDefault:
+                SSEAlgorithm: AES256
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+        Tags:
+          - Key: Service
+            Value: ${self:service}
+          - Key: Stage
+            Value: ${self:provider.stage}
+          - Key: Purpose
+            Value: cloudformation-templates
+
     # CloudWatch Alarms for Performance Monitoring (Requirements 10.3, 10.4)
     
     # Lambda Duration Alarm (p95 response time)
@@ -408,6 +501,19 @@ resources:
       Value: Tenants-${self:provider.stage}
       Export:
         Name: ${self:service}-${self:provider.stage}-tenants-table
+    
+    ClustersTableName:
+      Description: Clusters DynamoDB Table Name
+      Value: Clusters-${self:provider.stage}
+      Export:
+        Name: ${self:service}-${self:provider.stage}-clusters-table
+    
+    # S3 bucket outputs
+    TemplatesBucketName:
+      Description: S3 Bucket for CloudFormation Templates
+      Value: ${self:custom.config.s3.templateBucket}
+      Export:
+        Name: ${self:service}-${self:provider.stage}-templates-bucket
     
     # Performance monitoring outputs
     PerformanceThresholds:

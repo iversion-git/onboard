@@ -385,6 +385,7 @@ Error responses:
         "cluster_id": "550e8400-e29b-41d4-a716-446655440004",
         "name": "Production Cluster",
         "type": "dedicated",
+        "environment": "Production",
         "region": "us-east-1",
         "cidr": "10.0.0.0/16",
         "status": "deployed",
@@ -414,6 +415,7 @@ Error responses:
 {
   "name": "Production Cluster",                    // ✅ Required - Cluster name (1-255 chars)
   "type": "dedicated",                            // ✅ Required - "dedicated" or "shared"
+  "environment": "Production",                    // ✅ Required - "Production", "Staging", or "Dev"
   "region": "us-east-1",                          // ✅ Required - AWS region
   "cidr": "10.0.0.0/16"                          // ✅ Required - CIDR block (validated for uniqueness)
 }
@@ -427,6 +429,7 @@ Error responses:
     "cluster_id": "550e8400-e29b-41d4-a716-446655440004",
     "name": "Production Cluster",
     "type": "dedicated",
+    "environment": "Production",
     "region": "us-east-1",
     "cidr": "10.0.0.0/16",
     "status": "created",
@@ -450,7 +453,42 @@ Error responses:
 
 **Authentication**: ✅ Required (Admin only)
 
-**Request Body**: None
+**Request Body** (All fields optional):
+```json
+{
+  "template_key": "custom-template.yaml",           // ❌ Optional - Override default template (defaults to "{cluster.type}-cluster-template.yaml")
+  "cross_account_config": {                        // ❌ Optional - Cross-account deployment configuration
+    "target_account_id": "123456789012",           // ✅ Required if cross_account_config provided - 12-digit AWS account ID
+    "role_name": "CrossAccountDeploymentRole",     // ✅ Required if cross_account_config provided - IAM role name
+    "external_id": "optional-external-id"         // ❌ Optional - External ID for role assumption
+  },
+  "parameters": [                                  // ❌ Optional - Additional CloudFormation parameters
+    {
+      "ParameterKey": "CustomParam",               // ✅ Required - Parameter name
+      "ParameterValue": "CustomValue"              // ✅ Required - Parameter value
+    }
+  ],
+  "tags": [                                        // ❌ Optional - Additional resource tags
+    {
+      "Key": "Environment",                        // ✅ Required - Tag key
+      "Value": "Production"                        // ✅ Required - Tag value
+    }
+  ]
+}
+```
+
+**Template Selection Logic**:
+- If `template_key` is not provided, defaults to `{cluster.type}-cluster-template.yaml`
+- For `dedicated` clusters: `dedicated-cluster-template.yaml`
+- For `shared` clusters: `shared-cluster-template.yaml`
+- Templates are retrieved from the configured S3 template bucket
+
+**Default Parameters** (automatically included):
+- `ClusterName`: The cluster's name
+- `ClusterType`: The cluster's type (dedicated/shared)
+- `Region`: The cluster's AWS region
+- `CIDR`: The cluster's CIDR block
+- `ClusterId`: The cluster's unique identifier
 
 **Success Response (200)**:
 ```json
@@ -459,8 +497,10 @@ Error responses:
   "data": {
     "cluster_id": "550e8400-e29b-41d4-a716-446655440004",
     "deployment_id": "arn:aws:cloudformation:us-east-1:123456789012:stack/cluster-prod/12345678",
-    "status": "in_progress",
-    "message": "Deployment initiated successfully"
+    "stack_name": "control-plane-Production-Cluster-550e8400",
+    "status": "CREATE_IN_PROGRESS",
+    "template_url": "https://s3.amazonaws.com/templates-bucket/dedicated-cluster-template.yaml",
+    "initiated_at": "2025-12-26T05:00:00.000Z"
   },
   "timestamp": "2025-12-26T05:00:00.000Z"
 }
@@ -469,8 +509,9 @@ Error responses:
 **Error Responses**:
 - `401 Unauthorized` - Missing or invalid JWT token
 - `403 Forbidden` - Insufficient permissions (not admin)
-- `404 NotFound` - Cluster not found
+- `404 NotFound` - Cluster not found or template not found
 - `409 Conflict` - Cluster already deployed or deployment in progress
+- `400 ValidationError` - Invalid cross-account configuration or parameters
 
 ---
 
@@ -478,6 +519,17 @@ Error responses:
 **Description**: Check cluster deployment status (admin only)
 
 **Authentication**: ✅ Required (Admin only)
+
+**Query Parameters** (All optional):
+- `cross_account_config`: JSON string containing cross-account configuration for status checks
+  ```json
+  {
+    "target_account_id": "123456789012",
+    "role_name": "CrossAccountDeploymentRole", 
+    "external_id": "optional-external-id"
+  }
+  ```
+- `include_events`: Set to "true" to include recent CloudFormation stack events
 
 **Request Body**: None
 
@@ -487,23 +539,48 @@ Error responses:
   "success": true,
   "data": {
     "cluster_id": "550e8400-e29b-41d4-a716-446655440004",
+    "cluster_status": "deployed",
     "deployment_status": "CREATE_COMPLETE",
-    "status": "deployed",
-    "stack_status": "CREATE_COMPLETE",
+    "deployment_id": "arn:aws:cloudformation:us-east-1:123456789012:stack/cluster-prod/12345678",
     "stack_outputs": {
       "VpcId": "vpc-12345678",
       "SubnetIds": ["subnet-12345678", "subnet-87654321"]
     },
-    "last_updated": "2025-12-26T05:15:00.000Z"
+    "last_updated": "2025-12-26T05:15:00.000Z",
+    "deployed_at": "2025-12-26T05:15:00.000Z",
+    "recent_events": [
+      {
+        "timestamp": "2025-12-26T05:15:00.000Z",
+        "resource_type": "AWS::CloudFormation::Stack",
+        "logical_resource_id": "cluster-prod",
+        "resource_status": "CREATE_COMPLETE",
+        "resource_status_reason": "Stack creation completed successfully"
+      }
+    ]
   },
   "timestamp": "2025-12-26T05:00:00.000Z"
 }
 ```
 
+**Cluster Status Values**:
+- `created`: Cluster record created, not yet deployed
+- `deploying`: Deployment in progress
+- `deployed`: Successfully deployed and operational
+- `failed`: Deployment failed or stack in error state
+
+**Deployment Status Values**:
+- CloudFormation stack status values (e.g., `CREATE_IN_PROGRESS`, `CREATE_COMPLETE`, `CREATE_FAILED`)
+- `NOT_DEPLOYED`: No deployment initiated
+- `DEPLOYMENT_INITIATED`: Deployment just started
+- `DEPLOYMENT_FAILED`: Deployment process failed
+- `STACK_NOT_FOUND`: CloudFormation stack no longer exists
+- `STATUS_CHECK_FAILED`: Unable to retrieve status from CloudFormation
+
 **Error Responses**:
 - `401 Unauthorized` - Missing or invalid JWT token
 - `403 Forbidden` - Insufficient permissions (not admin)
 - `404 NotFound` - Cluster not found
+- `400 ValidationError` - Invalid query parameters
 - `500 InternalError` - CloudFormation API error
 
 ---
