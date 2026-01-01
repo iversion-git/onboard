@@ -209,6 +209,9 @@ export const statusHandler: RouteHandler = async (req, res) => {
       if (stackStatus.status === 'CREATE_COMPLETE' || stackStatus.status === 'UPDATE_COMPLETE') {
         clusterStatus = 'Active';
         deployedAt = deployedAt || new Date().toISOString();
+      } else if (stackStatus.status === 'DELETE_COMPLETE') {
+        // Stack has been deleted - cluster should be In-Active
+        clusterStatus = 'In-Active';
       } else if (stackStatus.status?.includes('FAILED') || stackStatus.status?.includes('ROLLBACK')) {
         clusterStatus = 'Failed';
       } else if (stackStatus.status?.includes('IN_PROGRESS')) {
