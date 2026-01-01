@@ -78,7 +78,7 @@ export const deployHandler: RouteHandler = async (req, res) => {
     const cluster = clusterResult.cluster;
 
     // Check if cluster is in a deployable state
-    if (cluster.status === 'deploying') {
+    if (cluster.status === 'Deploying') {
       logger.warn('Cluster deployment already in progress', {
         correlationId: req.correlationId,
         clusterId,
@@ -88,9 +88,19 @@ export const deployHandler: RouteHandler = async (req, res) => {
       return;
     }
 
+    if (cluster.status !== 'Active') {
+      logger.warn('Cluster is not in Active state for deployment', {
+        correlationId: req.correlationId,
+        clusterId,
+        currentStatus: cluster.status,
+      });
+      sendError(res, 'Conflict', 'Cluster must be in Active state to deploy', req.correlationId);
+      return;
+    }
+
     // Update cluster status to deploying
     await dynamoDBHelper.updateCluster(clusterId, {
-      status: 'deploying',
+      status: 'Deploying',
       deployment_status: 'DEPLOYMENT_INITIATED',
     }, req.correlationId);
 
@@ -199,7 +209,7 @@ export const deployHandler: RouteHandler = async (req, res) => {
 
       // Update cluster with deployment information
       await dynamoDBHelper.updateCluster(clusterId, {
-        status: deploymentResult.status === 'CREATE_FAILED' ? 'failed' : 'deploying',
+        status: deploymentResult.status === 'CREATE_FAILED' ? 'Failed' : 'Deploying',
         deployment_status: deploymentResult.status,
         deployment_id: deploymentResult.stackId,
       }, req.correlationId);
@@ -233,7 +243,7 @@ export const deployHandler: RouteHandler = async (req, res) => {
     } catch (deploymentError) {
       // Update cluster status to failed on deployment error
       await dynamoDBHelper.updateCluster(clusterId, {
-        status: 'failed',
+        status: 'Failed',
         deployment_status: 'DEPLOYMENT_FAILED',
       }, req.correlationId);
 

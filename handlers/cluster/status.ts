@@ -162,7 +162,7 @@ export const statusHandler: RouteHandler = async (req, res) => {
 
         // Update cluster status to reflect missing stack
         await dynamoDBHelper.updateCluster(clusterId, {
-          status: 'failed',
+          status: 'Failed',
           deployment_status: 'STACK_NOT_FOUND',
         }, req.correlationId);
 
@@ -170,7 +170,7 @@ export const statusHandler: RouteHandler = async (req, res) => {
           success: true,
           data: {
             cluster_id: clusterId,
-            cluster_status: 'failed',
+            cluster_status: 'Failed',
             deployment_status: 'STACK_NOT_FOUND',
             deployment_id: cluster.deployment_id,
             stack_outputs: {},
@@ -188,12 +188,12 @@ export const statusHandler: RouteHandler = async (req, res) => {
       let deployedAt = cluster.deployed_at;
 
       if (stackStatus.status === 'CREATE_COMPLETE' || stackStatus.status === 'UPDATE_COMPLETE') {
-        clusterStatus = 'deployed';
+        clusterStatus = 'Active';
         deployedAt = deployedAt || new Date().toISOString();
       } else if (stackStatus.status?.includes('FAILED') || stackStatus.status?.includes('ROLLBACK')) {
-        clusterStatus = 'failed';
+        clusterStatus = 'Failed';
       } else if (stackStatus.status?.includes('IN_PROGRESS')) {
-        clusterStatus = 'deploying';
+        clusterStatus = 'Deploying';
       }
 
       // Update cluster record if status changed

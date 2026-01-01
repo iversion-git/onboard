@@ -388,7 +388,7 @@ Error responses:
         "environment": "Production",
         "region": "us-east-1",
         "cidr": "10.0.0.0/16",
-        "status": "deployed",
+        "status": "Active",
         "deployment_status": "SUCCESS",
         "created_at": "2025-12-26T05:00:00.000Z",
         "deployed_at": "2025-12-26T05:15:00.000Z"
@@ -405,8 +405,8 @@ Error responses:
 
 ---
 
-### POST /clusters
-**Description**: Create a new cluster (admin only)
+### POST /cluster/register
+**Description**: Create a new cluster record in database (admin only)
 
 **Authentication**: ✅ Required (Admin only)
 
@@ -432,13 +432,15 @@ Error responses:
     "environment": "Production",
     "region": "us-east-1",
     "cidr": "10.0.0.0/16",
-    "status": "created",
+    "status": "Active",
     "deployment_status": null,
     "created_at": "2025-12-26T05:00:00.000Z"
   },
   "timestamp": "2025-12-26T05:00:00.000Z"
 }
 ```
+
+**Note**: This endpoint only creates the cluster record in the database with status "Active". To deploy the actual infrastructure, use the deploy endpoint.
 
 **Error Responses**:
 - `401 Unauthorized` - Missing or invalid JWT token
@@ -449,9 +451,11 @@ Error responses:
 ---
 
 ### POST /clusters/{cluster_id}/deploy
-**Description**: Deploy a cluster infrastructure (admin only)
+**Description**: Deploy cluster infrastructure using CloudFormation (admin only)
 
 **Authentication**: ✅ Required (Admin only)
+
+**Prerequisites**: Cluster must be in "Active" status (created but not yet deployed)
 
 **Request Body** (All fields optional):
 ```json
@@ -483,12 +487,10 @@ Error responses:
 - For `shared` clusters: `shared-cluster-template.yaml`
 - Templates are retrieved from the configured S3 template bucket
 
-**Default Parameters** (automatically included):
-- `ClusterName`: The cluster's name
-- `ClusterType`: The cluster's type (dedicated/shared)
-- `Region`: The cluster's AWS region
-- `CIDR`: The cluster's CIDR block
-- `ClusterId`: The cluster's unique identifier
+**Automatic Parameters** (calculated from cluster record):
+- `EnvironmentName`: The cluster's name
+- `VpcCIDR`: The cluster's CIDR block
+- All subnet CIDRs: Dynamically calculated from VPC CIDR with /24 subnets
 
 **Success Response (200)**:
 ```json
@@ -506,11 +508,16 @@ Error responses:
 }
 ```
 
+**Status Changes**:
+- Cluster status changes from "Active" → "Deploying"
+- Use the status endpoint to monitor deployment progress
+- Final status will be "Active" (success) or "Failed" (error)
+
 **Error Responses**:
 - `401 Unauthorized` - Missing or invalid JWT token
 - `403 Forbidden` - Insufficient permissions (not admin)
 - `404 NotFound` - Cluster not found or template not found
-- `409 Conflict` - Cluster already deployed or deployment in progress
+- `409 Conflict` - Cluster not in "Active" status or deployment already in progress
 - `400 ValidationError` - Invalid cross-account configuration or parameters
 
 ---
@@ -563,10 +570,9 @@ Error responses:
 ```
 
 **Cluster Status Values**:
-- `created`: Cluster record created, not yet deployed
-- `deploying`: Deployment in progress
-- `deployed`: Successfully deployed and operational
-- `failed`: Deployment failed or stack in error state
+- `Active`: Cluster record created and ready for deployment, or successfully deployed
+- `Deploying`: Infrastructure deployment in progress
+- `Failed`: Deployment failed or stack in error state
 
 **Deployment Status Values**:
 - CloudFormation stack status values (e.g., `CREATE_IN_PROGRESS`, `CREATE_COMPLETE`, `CREATE_FAILED`)

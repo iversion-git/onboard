@@ -39,7 +39,7 @@ export const createHandler: RouteHandler = async (req, res) => {
       environment,
       region,
       cidr,
-      status: 'created' as const,
+      status: 'Active' as const,
     };
 
     const result = await dynamoDBHelper.createCluster(clusterData, req.correlationId);

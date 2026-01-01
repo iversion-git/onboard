@@ -235,9 +235,17 @@ plugins:
   - serverless-esbuild
 
 # ============================================================================
-# AWS RESOURCES
+# DEPLOYMENT HOOKS
 # ============================================================================
-resources:
+# Upload CloudFormation templates after deployment
+hooks:
+  'after:aws:deploy:deploy:createStack': node scripts/upload-templates.js
+  'after:aws:deploy:deploy:updateStack': node scripts/upload-templates.js
+
+# Custom deployment hooks
+custom:
+  # Basic Settings
+  config:
   Resources:
     # DynamoDB Tables with stage-scoped naming (Requirements 8.4)
     

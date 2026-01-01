@@ -45,7 +45,7 @@ export interface ClusterRecord {
   environment: 'Production' | 'Staging' | 'Dev';  // New field for environment type
   region: string;             // AWS region
   cidr: string;               // Network CIDR block
-  status: 'created' | 'deploying' | 'deployed' | 'failed';
+  status: 'Active' | 'Deploying' | 'Failed';
   deployment_status?: string; // CloudFormation stack status
   deployment_id?: string;     // CloudFormation stack ARN
   stack_outputs?: Record<string, any>; // CloudFormation outputs
@@ -116,7 +116,7 @@ export const ClusterRecordSchema = z.object({
   cidr: z.string().refine(validateCIDR, {
     message: 'CIDR must be a valid private IPv4 CIDR block (RFC 1918)'
   }),
-  status: z.enum(['created', 'deploying', 'deployed', 'failed']),
+  status: z.enum(['Active', 'Deploying', 'Failed']),
   deployment_status: z.string().optional(),
   deployment_id: z.string().optional(),
   stack_outputs: z.record(z.any()).optional(),
@@ -170,7 +170,7 @@ export const CreateClusterSchema = z.object({
 export const UpdateClusterSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   environment: z.enum(['Production', 'Staging', 'Dev']).optional(),
-  status: z.enum(['created', 'deploying', 'deployed', 'failed']).optional(),
+  status: z.enum(['Active', 'Deploying', 'Failed']).optional(),
   deployment_status: z.string().optional(),
   deployment_id: z.string().optional(),
   stack_outputs: z.record(z.any()).optional(),

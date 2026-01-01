@@ -18,8 +18,8 @@ export function registerClusterRoutes(router: InternalRouter): void {
     listHandler
   );
 
-  // POST /clusters - Create new cluster (admin only)
-  router.post('/clusters',
+  // POST /cluster/register - Create new cluster (admin only)
+  router.post('/cluster/register',
     authMiddleware(),
     requireAdmin,
     validationMiddleware({
