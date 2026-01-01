@@ -460,7 +460,6 @@ Error responses:
 **Request Body** (All fields optional):
 ```json
 {
-  "template_key": "custom-template.yaml",           // ❌ Optional - Override default template (defaults to "{cluster.type}-cluster-template.yaml")
   "cross_account_config": {                        // ❌ Optional - Cross-account deployment configuration
     "target_account_id": "123456789012",           // ✅ Required if cross_account_config provided - 12-digit AWS account ID
     "role_name": "CrossAccountDeploymentRole",     // ✅ Required if cross_account_config provided - IAM role name
@@ -482,7 +481,7 @@ Error responses:
 ```
 
 **Template Selection Logic**:
-- If `template_key` is not provided, defaults to `{cluster.type}-cluster-template.yaml`
+- Templates are automatically selected based on cluster type:
 - For `dedicated` clusters: `dedicated-cluster-template.yaml`
 - For `shared` clusters: `shared-cluster-template.yaml`
 - Templates are retrieved from the configured S3 template bucket

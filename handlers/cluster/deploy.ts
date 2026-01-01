@@ -12,7 +12,6 @@ import { z } from 'zod';
 
 // Deployment request schema
 const DeployClusterSchema = z.object({
-  template_key: z.string().min(1).optional(), // Optional template key, defaults to cluster type
   cross_account_config: z.object({
     target_account_id: z.string().regex(/^\d{12}$/, 'Must be a valid 12-digit AWS account ID'),
     role_name: z.string().min(1),
@@ -62,7 +61,7 @@ export const deployHandler: RouteHandler = async (req, res) => {
       return;
     }
 
-    const { template_key, cross_account_config, parameters, tags } = validation.data;
+    const { cross_account_config, parameters, tags } = validation.data;
 
     // Get cluster record
     const clusterResult = await dynamoDBHelper.getCluster(clusterId, req.correlationId);
@@ -107,8 +106,8 @@ export const deployHandler: RouteHandler = async (req, res) => {
     try {
       const config = getConfig();
       
-      // Determine template key based on cluster type if not provided
-      const templateKey = template_key || `${cluster.type}-cluster-template.yaml`;
+      // Determine template key based on cluster type
+      const templateKey = `${cluster.type}-cluster-template.yaml`;
       
       // Get S3 template manager
       const templateManager = getS3TemplateManager(config.s3.templateBucket);
