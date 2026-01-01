@@ -792,16 +792,24 @@ export class DynamoDBHelper {
         return [];
       }
 
-      // Validate all cluster records
+      // Validate all cluster records, but skip invalid ones instead of failing
       const validClusters: ClusterRecord[] = [];
       for (const item of result.Items) {
-        const validationResult = ClusterRecordSchema.safeParse(item);
-        if (validationResult.success) {
-          validClusters.push(validationResult.data);
-        } else {
-          logger.warn('Invalid cluster record found during scan', { 
-            item: Object.keys(item),
-            errors: validationResult.error.errors,
+        try {
+          const validationResult = ClusterRecordSchema.safeParse(item);
+          if (validationResult.success) {
+            validClusters.push(validationResult.data);
+          } else {
+            logger.warn('Invalid cluster record found during scan, skipping', { 
+              clusterId: item.cluster_id,
+              errors: validationResult.error.errors,
+              correlationId 
+            });
+          }
+        } catch (validationError) {
+          logger.warn('Schema validation failed for cluster record, skipping', { 
+            clusterId: item.cluster_id,
+            error: validationError instanceof Error ? validationError.message : 'Unknown validation error',
             correlationId 
           });
         }
@@ -819,9 +827,15 @@ export class DynamoDBHelper {
 
   async createCluster(clusterData: Omit<ClusterRecord, 'cluster_id' | 'created_at' | 'updated_at'>, correlationId?: string): Promise<DatabaseOperationResult<ClusterRecord>> {
     try {
-      // First, get all existing clusters to check for CIDR overlaps
-      const existingClusters = await this.getAllClusters(correlationId);
-      const existingCidrs = existingClusters.map(cluster => cluster.cidr);
+      // Get all existing clusters for CIDR overlap checking (without schema validation)
+      const scanCommand = new ScanCommand({
+        TableName: this.tables.clusters,
+      });
+
+      const scanResult = await this.client.send(scanCommand);
+      const existingCidrs = (scanResult.Items || [])
+        .map(item => item.cidr)
+        .filter(cidr => typeof cidr === 'string');
 
       // Validate CIDR and check for overlaps
       const cidrValidation = validateCIDRWithOverlapCheck(clusterData.cidr, existingCidrs);

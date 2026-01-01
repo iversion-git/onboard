@@ -1,27 +1,6 @@
 // Data models for DynamoDB tables with validation schemas
 import { z } from 'zod';
-
-// CIDR validation regex for IPv4 CIDR notation (copied to avoid circular imports)
-const CIDR_REGEX = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\/(?:[0-9]|[1-2][0-9]|3[0-2])$/;
-
-// Private IP ranges (RFC 1918) validation
-const PRIVATE_IP_RANGES = [
-  /^10\.(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){2}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\/(?:[8-9]|[12][0-9]|3[0-2])$/,
-  /^172\.(?:1[6-9]|2[0-9]|3[01])\.(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){1}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\/(?:1[2-9]|2[0-9]|3[0-2])$/,
-  /^192\.168\.(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){1}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\/(?:1[6-9]|2[0-9]|3[0-2])$/
-];
-
-/**
- * Validate CIDR format and ensure it's a private IP range (RFC 1918)
- */
-const validateCIDR = (cidr: string): boolean => {
-  if (!CIDR_REGEX.test(cidr)) {
-    return false;
-  }
-  
-  // Check if it's a private IP range (RFC 1918)
-  return PRIVATE_IP_RANGES.some(regex => regex.test(cidr));
-};
+import { validateCIDR } from './cidr-utils.js';
 
 // Staff Table Data Model
 export interface StaffRecord {
