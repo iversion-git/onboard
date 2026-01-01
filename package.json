@@ -5,7 +5,7 @@
   "main": "index.ts",
   "type": "module",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=24.0.0"
   },
   "scripts": {
     "build": "esbuild index.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist/index.mjs --sourcemap --minify",
@@ -17,10 +17,10 @@
     "type-check": "tsc --noEmit",
     "generate-jwt-secret": "node scripts/generate-jwt-secret.js",
     "validate-deployment": "node scripts/validate-deployment.js",
-    "deploy": "serverless deploy",
-    "deploy:dev": "serverless deploy --stage dev",
-    "deploy:staging": "serverless deploy --stage staging",
-    "deploy:prod": "serverless deploy --stage prod",
+    "deploy": "serverless deploy && node scripts/upload-templates.js",
+    "deploy:dev": "serverless deploy --stage dev && node scripts/upload-templates.js",
+    "deploy:staging": "serverless deploy --stage staging && node scripts/upload-templates.js",
+    "deploy:prod": "serverless deploy --stage prod && node scripts/upload-templates.js",
     "deploy:with-templates": "powershell -ExecutionPolicy Bypass -File scripts/deploy-with-templates.ps1",
     "deploy:with-templates:staging": "powershell -ExecutionPolicy Bypass -File scripts/deploy-with-templates.ps1 -Stage staging",
     "deploy:with-templates:prod": "powershell -ExecutionPolicy Bypass -File scripts/deploy-with-templates.ps1 -Stage prod",
@@ -57,8 +57,7 @@
     "esbuild": "^0.19.11",
     "eslint": "^8.56.0",
     "fast-check": "^3.15.1",
-    "serverless": "^3.38.0",
-    "serverless-esbuild": "^1.52.1",
+    "serverless": "^4.27.0",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3",
     "vitest": "^1.2.0"

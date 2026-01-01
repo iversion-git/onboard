@@ -3,7 +3,7 @@
 # ============================================================================
 
 service: aws-lambda-control-plane  # Change this for multiple stacks
-frameworkVersion: '3'
+frameworkVersion: '4'
 
 # ============================================================================
 # CONFIGURATION VARIABLES - EDIT THESE VALUES
@@ -57,12 +57,24 @@ custom:
       api4xxErrorThreshold: 20
       api5xxErrorThreshold: 5
 
-  # esbuild configuration for single function bundling
+  # Built-in ESBuild configuration for Serverless v4
+  build:
+    esbuild:
+      bundle: true
+      minify: true
+      sourcemap: true
+      target: node24
+      format: esm
+      platform: node
+      mainFields: [module, main]
+      exclude: []
+      
+  # esbuild configuration (legacy - keeping for reference but not used)
   esbuild:
     bundle: true
     minify: true
     sourcemap: true
-    target: node20
+    target: node24
     format: esm
     platform: node
     outExtension:
@@ -85,7 +97,7 @@ custom:
 # ============================================================================
 provider:
   name: aws
-  runtime: nodejs20.x
+  runtime: nodejs24.x
   stage: ${opt:stage, self:custom.config.defaultStage}
   region: ${opt:region, self:custom.config.defaultRegion}
   memorySize: ${self:custom.config.lambdaMemory}
@@ -205,6 +217,7 @@ provider:
       maxAge: 86400
 
 # ============================================================================
+# ============================================================================
 # FUNCTIONS CONFIGURATION
 # ============================================================================
 functions:
@@ -231,16 +244,12 @@ functions:
 # ============================================================================
 # PLUGINS
 # ============================================================================
-plugins:
-  - serverless-esbuild
+# Note: Serverless v4 has built-in ESBuild support, no plugin needed
 
 # ============================================================================
-# DEPLOYMENT HOOKS
+# AWS RESOURCES
 # ============================================================================
-# Upload CloudFormation templates after deployment
-hooks:
-  'after:aws:deploy:deploy:createStack': node scripts/upload-templates.js
-  'after:aws:deploy:deploy:updateStack': node scripts/upload-templates.js
+resources:
   Resources:
     # DynamoDB Tables with stage-scoped naming (Requirements 8.4)
     

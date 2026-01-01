@@ -9,28 +9,32 @@ Write-Host "📍 Stage: $Stage" -ForegroundColor Cyan
 Write-Host "📍 Region: $Region" -ForegroundColor Cyan
 Write-Host ""
 
-# Set environment variables
+# Set environment variables for the upload script
 $env:STAGE = $Stage
 $env:AWS_REGION = $Region
 
 try {
     # Deploy the serverless application
     Write-Host "📦 Deploying serverless application..." -ForegroundColor Yellow
-    serverless deploy --stage $Stage --region $Region
     
-    if ($LASTEXITCODE -ne 0) {
-        throw "Serverless deployment failed"
-    }
-    
-    Write-Host "✅ Serverless deployment completed successfully!" -ForegroundColor Green
-    Write-Host ""
-    
-    # Upload CloudFormation templates
-    Write-Host "📤 Uploading CloudFormation templates..." -ForegroundColor Yellow
-    node scripts/upload-templates.js
-    
-    if ($LASTEXITCODE -ne 0) {
-        throw "Template upload failed"
+    if ($Stage -eq "dev") {
+        npm run deploy:dev
+    } elseif ($Stage -eq "staging") {
+        npm run deploy:staging  
+    } elseif ($Stage -eq "prod") {
+        npm run deploy:prod
+    } else {
+        serverless deploy --stage $Stage --region $Region
+        if ($LASTEXITCODE -ne 0) {
+            throw "Serverless deployment failed"
+        }
+        
+        # Upload templates manually for custom stages
+        Write-Host "📤 Uploading CloudFormation templates..." -ForegroundColor Yellow
+        node scripts/upload-templates.js
+        if ($LASTEXITCODE -ne 0) {
+            throw "Template upload failed"
+        }
     }
     
     Write-Host ""
