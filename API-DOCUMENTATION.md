@@ -440,7 +440,7 @@ Error responses:
 }
 ```
 
-**Note**: This endpoint only creates the cluster record in the database with status "Active". To deploy the actual infrastructure, use the deploy endpoint.
+**Note**: This endpoint only creates the cluster record in the database with status "In-Active". To deploy the actual infrastructure, use the deploy endpoint.
 
 **Error Responses**:
 - `401 Unauthorized` - Missing or invalid JWT token
@@ -455,7 +455,13 @@ Error responses:
 
 **Authentication**: ✅ Required (Admin only)
 
-**Prerequisites**: Cluster must be in "Active" status (created but not yet deployed)
+**Prerequisites**: Cluster must be in "In-Active" or "Failed" status
+
+**Deployment Logic**:
+- **In-Active**: Ready for first-time deployment (newly created cluster)
+- **Active**: Successfully deployed and operational
+- **Failed**: Deployment failed, can retry deployment
+- **Deploying**: ❌ Cannot deploy (deployment in progress)
 
 **Request Body** (All fields optional):
 ```json
@@ -508,15 +514,16 @@ Error responses:
 ```
 
 **Status Changes**:
-- Cluster status changes from "Active" → "Deploying"
+- **In-Active** → **Deploying** (deployment starts)
+- **Failed** → **Deploying** (retry deployment)
 - Use the status endpoint to monitor deployment progress
-- Final status will be "Active" (success) or "Failed" (error)
+- Final status will be **Active** (success) or **Failed** (error)
 
 **Error Responses**:
 - `401 Unauthorized` - Missing or invalid JWT token
 - `403 Forbidden` - Insufficient permissions (not admin)
 - `404 NotFound` - Cluster not found or template not found
-- `409 Conflict` - Cluster not in "Active" status or deployment already in progress
+- `409 Conflict` - Cluster in "Deploying" status (deployment in progress)
 - `400 ValidationError` - Invalid cross-account configuration or parameters
 
 ---
@@ -569,8 +576,9 @@ Error responses:
 ```
 
 **Cluster Status Values**:
-- `Active`: Cluster record created and ready for deployment, or successfully deployed
+- `In-Active`: Cluster record created, ready for first deployment
 - `Deploying`: Infrastructure deployment in progress
+- `Active`: Successfully deployed and operational
 - `Failed`: Deployment failed or stack in error state
 
 **Deployment Status Values**:

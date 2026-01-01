@@ -1,6 +1,7 @@
 // GET /clusters/{id}/status handler for deployment status checking
 import type { RouteHandler } from '../../lib/types.js';
-import { dynamoDBHelper } from '../../lib/dynamodb.js';
+import { getDynamoDBClient, getTableNames } from '../../lib/dynamodb.js';
+import { GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { getCloudFormationHelper } from '../../lib/cloudformation.js';
 import { getCrossAccountRoleManager } from '../../lib/cross-account-roles.js';
 import { logger } from '../../lib/logging.js';
@@ -60,9 +61,16 @@ export const statusHandler: RouteHandler = async (req, res) => {
 
     const { cross_account_config, include_events } = queryValidation.data;
 
-    // Get cluster record
-    const clusterResult = await dynamoDBHelper.getCluster(clusterId, req.correlationId);
-    if (!clusterResult.found || !clusterResult.cluster) {
+    // Get cluster record directly from DynamoDB (bypass schema validation)
+    const dynamoClient = getDynamoDBClient();
+    const tables = getTableNames();
+    
+    const clusterResult = await dynamoClient.send(new GetCommand({
+      TableName: tables.clusters,
+      Key: { cluster_id: clusterId }
+    }));
+    
+    if (!clusterResult.Item) {
       logger.warn('Cluster not found for status check', {
         correlationId: req.correlationId,
         clusterId,
@@ -71,7 +79,7 @@ export const statusHandler: RouteHandler = async (req, res) => {
       return;
     }
 
-    const cluster = clusterResult.cluster;
+    const cluster = clusterResult.Item;
 
     // If cluster has no deployment ID, return cluster status only
     if (!cluster.deployment_id) {
@@ -161,10 +169,21 @@ export const statusHandler: RouteHandler = async (req, res) => {
         });
 
         // Update cluster status to reflect missing stack
-        await dynamoDBHelper.updateCluster(clusterId, {
-          status: 'Failed',
-          deployment_status: 'STACK_NOT_FOUND',
-        }, req.correlationId);
+        await dynamoClient.send(new UpdateCommand({
+          TableName: tables.clusters,
+          Key: { cluster_id: clusterId },
+          UpdateExpression: 'SET #status = :status, #deployment_status = :deployment_status, #updated_at = :updated_at',
+          ExpressionAttributeNames: {
+            '#status': 'status',
+            '#deployment_status': 'deployment_status',
+            '#updated_at': 'updated_at'
+          },
+          ExpressionAttributeValues: {
+            ':status': 'Failed',
+            ':deployment_status': 'STACK_NOT_FOUND',
+            ':updated_at': new Date().toISOString()
+          }
+        }));
 
         res.status(200).json({
           success: true,
@@ -201,12 +220,26 @@ export const statusHandler: RouteHandler = async (req, res) => {
           stackStatus.status !== cluster.deployment_status ||
           (stackStatus.outputs && JSON.stringify(stackStatus.outputs) !== JSON.stringify(cluster.stack_outputs))) {
         
-        await dynamoDBHelper.updateCluster(clusterId, {
-          status: clusterStatus,
-          deployment_status: stackStatus.status,
-          stack_outputs: stackStatus.outputs || cluster.stack_outputs || {},
-          ...(deployedAt && deployedAt !== cluster.deployed_at && { deployed_at: deployedAt }),
-        }, req.correlationId);
+        await dynamoClient.send(new UpdateCommand({
+          TableName: tables.clusters,
+          Key: { cluster_id: clusterId },
+          UpdateExpression: 'SET #status = :status, #deployment_status = :deployment_status, #stack_outputs = :stack_outputs, #updated_at = :updated_at' +
+            (deployedAt && deployedAt !== cluster.deployed_at ? ', #deployed_at = :deployed_at' : ''),
+          ExpressionAttributeNames: {
+            '#status': 'status',
+            '#deployment_status': 'deployment_status', 
+            '#stack_outputs': 'stack_outputs',
+            '#updated_at': 'updated_at',
+            ...(deployedAt && deployedAt !== cluster.deployed_at && { '#deployed_at': 'deployed_at' })
+          },
+          ExpressionAttributeValues: {
+            ':status': clusterStatus,
+            ':deployment_status': String(stackStatus.status),
+            ':stack_outputs': stackStatus.outputs || cluster.stack_outputs || {},
+            ':updated_at': new Date().toISOString(),
+            ...(deployedAt && deployedAt !== cluster.deployed_at && { ':deployed_at': deployedAt })
+          }
+        }));
       }
 
       logger.info('Cluster status retrieved successfully', {
@@ -222,7 +255,7 @@ export const statusHandler: RouteHandler = async (req, res) => {
         data: {
           cluster_id: clusterId,
           cluster_status: clusterStatus,
-          deployment_status: stackStatus.status,
+          deployment_status: String(stackStatus.status),
           deployment_id: cluster.deployment_id,
           stack_outputs: stackStatus.outputs || {},
           last_updated: new Date().toISOString(),

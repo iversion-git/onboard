@@ -1,6 +1,27 @@
 // Data models for DynamoDB tables with validation schemas
 import { z } from 'zod';
-import { validateCIDR } from './cidr-utils.js';
+
+// CIDR validation regex for IPv4 CIDR notation (copied to avoid circular imports)
+const CIDR_REGEX = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\/(?:[0-9]|[1-2][0-9]|3[0-2])$/;
+
+// Private IP ranges (RFC 1918) validation
+const PRIVATE_IP_RANGES = [
+  /^10\.(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){2}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\/(?:[8-9]|[12][0-9]|3[0-2])$/,
+  /^172\.(?:1[6-9]|2[0-9]|3[01])\.(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){1}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\/(?:1[2-9]|2[0-9]|3[0-2])$/,
+  /^192\.168\.(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){1}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\/(?:1[6-9]|2[0-9]|3[0-2])$/
+];
+
+/**
+ * Validate CIDR format and ensure it's a private IP range (RFC 1918)
+ */
+const validateCIDR = (cidr: string): boolean => {
+  if (!CIDR_REGEX.test(cidr)) {
+    return false;
+  }
+  
+  // Check if it's a private IP range (RFC 1918)
+  return PRIVATE_IP_RANGES.some(regex => regex.test(cidr));
+};
 
 // Staff Table Data Model
 export interface StaffRecord {
@@ -45,7 +66,7 @@ export interface ClusterRecord {
   environment: 'Production' | 'Staging' | 'Dev';  // New field for environment type
   region: string;             // AWS region
   cidr: string;               // Network CIDR block
-  status: 'Active' | 'Deploying' | 'Failed';
+  status: 'In-Active' | 'Deploying' | 'Active' | 'Failed';
   deployment_status?: string; // CloudFormation stack status
   deployment_id?: string;     // CloudFormation stack ARN
   stack_outputs?: Record<string, any>; // CloudFormation outputs
@@ -116,7 +137,7 @@ export const ClusterRecordSchema = z.object({
   cidr: z.string().refine(validateCIDR, {
     message: 'CIDR must be a valid private IPv4 CIDR block (RFC 1918)'
   }),
-  status: z.enum(['Active', 'Deploying', 'Failed']),
+  status: z.enum(['In-Active', 'Deploying', 'Active', 'Failed']),
   deployment_status: z.string().optional(),
   deployment_id: z.string().optional(),
   stack_outputs: z.record(z.any()).optional(),
@@ -170,7 +191,7 @@ export const CreateClusterSchema = z.object({
 export const UpdateClusterSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   environment: z.enum(['Production', 'Staging', 'Dev']).optional(),
-  status: z.enum(['Active', 'Deploying', 'Failed']).optional(),
+  status: z.enum(['In-Active', 'Deploying', 'Active', 'Failed']).optional(),
   deployment_status: z.string().optional(),
   deployment_id: z.string().optional(),
   stack_outputs: z.record(z.any()).optional(),
@@ -259,16 +280,6 @@ export interface CIDROverlapCheck {
   cidr: string;
   existingCidrs: string[];
 }
-
-// Re-export CIDR utilities from cidr-utils
-export { 
-  checkCIDROverlap, 
-  validateCIDRWithOverlapCheck, 
-  getCIDRInfo, 
-  isIPInCIDR,
-  calculateSubnetCIDRs,
-  type SubnetConfiguration
-} from './cidr-utils.js';
 
 // Export AWS regions for external use
 export { AWS_REGIONS };

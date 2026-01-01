@@ -284,7 +284,14 @@ export class CloudFormationHelper {
         stackId: stack.StackId!,
         stackName: stack.StackName!,
         status: stack.StackStatus!,
-        ...(stack.Outputs && { outputs: stack.Outputs })
+        ...(stack.Outputs && { 
+          outputs: stack.Outputs.reduce((acc, output) => {
+            if (output.OutputKey && output.OutputValue) {
+              acc[output.OutputKey] = output.OutputValue;
+            }
+            return acc;
+          }, {} as Record<string, any>)
+        })
       };
     } catch (error) {
       logger.error('Failed to get stack status', {

@@ -21,9 +21,9 @@ import {
   StaffRecordSchema,
   PasswordResetTokenSchema,
   TenantRecordSchema,
-  ClusterRecordSchema,
-  validateCIDRWithOverlapCheck
+  ClusterRecordSchema
 } from './data-models.js';
+import { validateCIDRWithOverlapCheck } from './cidr-utils.js';
 import { createApiError } from './errors.js';
 import { randomUUID } from 'crypto';
 
@@ -839,7 +839,6 @@ export class DynamoDBHelper {
       const clusterRecord: ClusterRecord = {
         cluster_id: randomUUID(),
         ...clusterData,
-        status: 'created',
         created_at: now,
         updated_at: now,
       };

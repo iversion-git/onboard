@@ -87,13 +87,14 @@ export const deployHandler: RouteHandler = async (req, res) => {
       return;
     }
 
-    if (cluster.status !== 'Active') {
-      logger.warn('Cluster is not in Active state for deployment', {
+    // Allow deployment for In-Active (new) and Failed clusters
+    if (cluster.status !== 'In-Active' && cluster.status !== 'Failed') {
+      logger.warn('Cluster is not in deployable state', {
         correlationId: req.correlationId,
         clusterId,
         currentStatus: cluster.status,
       });
-      sendError(res, 'Conflict', 'Cluster must be in Active state to deploy', req.correlationId);
+      sendError(res, 'Conflict', `Cluster status '${cluster.status}' is not deployable. Must be 'In-Active' or 'Failed'`, req.correlationId);
       return;
     }
 
@@ -119,7 +120,9 @@ export const deployHandler: RouteHandler = async (req, res) => {
       }
 
       // Prepare CloudFormation deployment configuration
-      const stackName = `control-plane-${cluster.name}-${clusterId.substring(0, 8)}`;
+      // Sanitize cluster name for CloudFormation stack name (no spaces, special chars)
+      const sanitizedClusterName = cluster.name.replace(/[^a-zA-Z0-9-]/g, '-').replace(/-+/g, '-');
+      const stackName = `control-plane-${sanitizedClusterName}-${clusterId.substring(0, 8)}`;
       
       // Calculate subnet CIDRs from VPC CIDR
       const subnets = calculateSubnetCIDRs(cluster.cidr);
@@ -128,6 +131,10 @@ export const deployHandler: RouteHandler = async (req, res) => {
       const defaultParameters = [
         { ParameterKey: 'EnvironmentName', ParameterValue: cluster.name },
         { ParameterKey: 'VpcCIDR', ParameterValue: cluster.cidr },
+        // Cluster-specific parameters for tagging
+        { ParameterKey: 'ClusterName', ParameterValue: cluster.name },
+        { ParameterKey: 'ClusterType', ParameterValue: cluster.type === 'dedicated' ? 'Dedicated' : 'Shared' },
+        { ParameterKey: 'ClusterEnvironment', ParameterValue: cluster.environment },
         // Public subnet CIDRs
         { ParameterKey: 'PublicSubnet1CIDR', ParameterValue: subnets.public[0] },
         { ParameterKey: 'PublicSubnet2CIDR', ParameterValue: subnets.public[1] },
@@ -209,7 +216,7 @@ export const deployHandler: RouteHandler = async (req, res) => {
       // Update cluster with deployment information
       await dynamoDBHelper.updateCluster(clusterId, {
         status: deploymentResult.status === 'CREATE_FAILED' ? 'Failed' : 'Deploying',
-        deployment_status: deploymentResult.status,
+        deployment_status: String(deploymentResult.status), // Ensure it's a string
         deployment_id: deploymentResult.stackId,
       }, req.correlationId);
 
@@ -232,7 +239,7 @@ export const deployHandler: RouteHandler = async (req, res) => {
           cluster_id: clusterId,
           deployment_id: deploymentResult.stackId,
           stack_name: stackName,
-          status: deploymentResult.status,
+          status: String(deploymentResult.status),
           template_url: templateInfo.url,
           initiated_at: new Date().toISOString(),
         },

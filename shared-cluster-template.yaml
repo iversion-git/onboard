@@ -176,6 +176,30 @@ Parameters:
     Default: ""
     MaxLength: 100
 
+  # Cluster-specific parameters for tagging
+  ClusterName:
+    Type: String
+    Description: Name of the cluster for resource tagging
+    MinLength: 1
+    MaxLength: 255
+
+  ClusterType:
+    Type: String
+    Description: Type of cluster (Shared or Dedicated) for resource tagging
+    AllowedValues:
+      - Shared
+      - Dedicated
+    ConstraintDescription: Must be either Shared or Dedicated
+
+  ClusterEnvironment:
+    Type: String
+    Description: Environment of cluster (Production, Staging, or Dev) for resource tagging
+    AllowedValues:
+      - Production
+      - Staging
+      - Dev
+    ConstraintDescription: Must be Production, Staging, or Dev
+
 Conditions:
   # Condition to determine if we should use Availability Zone 2
   UseAZ2: !Or
@@ -225,9 +249,11 @@ Resources:
       EnableDnsHostnames: true
       Tags:
         - Key: Name
-          Value: !Sub ${EnvironmentName}-VPC
+          Value: !Ref ClusterName
+        - Key: Type
+          Value: !Ref ClusterType
         - Key: Environment
-          Value: !Ref EnvironmentName
+          Value: !Ref ClusterEnvironment
         - Key: ManagedBy
           Value: CloudFormation
         - !If
@@ -256,8 +282,10 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-DHCPOptions
+        - Key: Type
+          Value: !Ref ClusterType
         - Key: Environment
-          Value: !Ref EnvironmentName
+          Value: !Ref ClusterEnvironment
         - Key: ManagedBy
           Value: CloudFormation
         - !If
@@ -292,8 +320,10 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-InternetGateway
+        - Key: Type
+          Value: !Ref ClusterType
         - Key: Environment
-          Value: !Ref EnvironmentName
+          Value: !Ref ClusterEnvironment
         - Key: ManagedBy
           Value: CloudFormation
         - !If
@@ -332,8 +362,10 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-PublicSubnet-AZ1
+        - Key: Type
+          Value: !Ref ClusterType
         - Key: Environment
-          Value: !Ref EnvironmentName
+          Value: !Ref ClusterEnvironment
         - Key: ManagedBy
           Value: CloudFormation
         - Key: Zone
@@ -365,8 +397,10 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-PublicSubnet-AZ2
+        - Key: Type
+          Value: !Ref ClusterType
         - Key: Environment
-          Value: !Ref EnvironmentName
+          Value: !Ref ClusterEnvironment
         - Key: ManagedBy
           Value: CloudFormation
         - Key: Zone
@@ -398,8 +432,10 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-PublicSubnet-AZ3
+        - Key: Type
+          Value: !Ref ClusterType
         - Key: Environment
-          Value: !Ref EnvironmentName
+          Value: !Ref ClusterEnvironment
         - Key: ManagedBy
           Value: CloudFormation
         - Key: Zone
@@ -431,8 +467,10 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-PublicRouteTable
+        - Key: Type
+          Value: !Ref ClusterType
         - Key: Environment
-          Value: !Ref EnvironmentName
+          Value: !Ref ClusterEnvironment
         - Key: ManagedBy
           Value: CloudFormation
         - Key: Zone
