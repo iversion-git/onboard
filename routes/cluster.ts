@@ -7,7 +7,8 @@ import {
   listHandler, 
   createHandler, 
   deployHandler,
-  statusHandler 
+  statusHandler,
+  deleteHandler 
 } from '../handlers/cluster/index.js';
 
 export function registerClusterRoutes(router: InternalRouter): void {
@@ -28,17 +29,24 @@ export function registerClusterRoutes(router: InternalRouter): void {
     createHandler
   );
 
-  // POST /clusters/{id}/deploy - Deploy cluster infrastructure (admin only)
-  router.post('/clusters/:id/deploy',
+  // POST /cluster/{id}/deploy - Deploy cluster infrastructure (admin only)
+  router.post('/cluster/:id/deploy',
     authMiddleware(),
     requireAdmin,
     deployHandler
   );
 
-  // GET /clusters/{id}/status - Get cluster deployment status (admin only)
-  router.get('/clusters/:id/status',
+  // GET /cluster/{id}/status - Get cluster deployment status (admin only)
+  router.get('/cluster/:id/status',
     authMiddleware(),
     requireAdmin,
     statusHandler
+  );
+
+  // DELETE /cluster/{id} - Delete In-Active cluster from database (admin only)
+  router.delete('/cluster/:id',
+    authMiddleware(),
+    requireAdmin,
+    deleteHandler
   );
 }

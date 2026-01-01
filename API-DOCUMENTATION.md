@@ -450,7 +450,7 @@ Error responses:
 
 ---
 
-### POST /clusters/{cluster_id}/deploy
+### POST /cluster/{cluster_id}/deploy
 **Description**: Deploy cluster infrastructure using CloudFormation (admin only)
 
 **Authentication**: ✅ Required (Admin only)
@@ -528,7 +528,7 @@ Error responses:
 
 ---
 
-### GET /clusters/{cluster_id}/status
+### GET /cluster/{cluster_id}/status
 **Description**: Check cluster deployment status (admin only)
 
 **Authentication**: ✅ Required (Admin only)
@@ -595,6 +595,44 @@ Error responses:
 - `404 NotFound` - Cluster not found
 - `400 ValidationError` - Invalid query parameters
 - `500 InternalError` - CloudFormation API error
+
+---
+
+### DELETE /cluster/{cluster_id}
+**Description**: Delete cluster record from database (admin only)
+
+**Authentication**: ✅ Required (Admin only)
+
+**Security**: Only clusters with status `In-Active` can be deleted. This ensures that active infrastructure cannot be accidentally removed from tracking.
+
+**Request Body**: None
+
+**Success Response (200)**:
+```json
+{
+  "success": true,
+  "data": {
+    "cluster_id": "550e8400-e29b-41d4-a716-446655440004",
+    "cluster_name": "production-cluster-01",
+    "message": "Cluster record deleted from database successfully",
+    "deleted_at": "2025-12-26T05:00:00.000Z",
+    "deleted_by": "admin@company.com"
+  },
+  "timestamp": "2025-12-26T05:00:00.000Z"
+}
+```
+
+**Error Responses**:
+- `401 Unauthorized` - Missing or invalid JWT token
+- `403 Forbidden` - Insufficient permissions (not admin) OR cluster status is not `In-Active`
+- `404 NotFound` - Cluster not found
+- `500 InternalError` - Database operation failed
+
+**Important Notes**:
+- Only deletes the cluster record from the database
+- Does NOT delete any AWS infrastructure (CloudFormation stacks must be manually deleted)
+- Cluster must have status `In-Active` (not deployed or manually deleted from AWS)
+- This is a safety measure to prevent accidental deletion of active infrastructure
 
 ---
 

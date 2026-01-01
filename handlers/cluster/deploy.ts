@@ -161,6 +161,7 @@ export const deployHandler: RouteHandler = async (req, res) => {
           ...(tags || [])
         ],
         capabilities: ['CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM'] as ('CAPABILITY_IAM' | 'CAPABILITY_NAMED_IAM' | 'CAPABILITY_AUTO_EXPAND')[],
+        enableTerminationProtection: true, // Enable delete protection for security
         timeoutInMinutes: 60,
       };
 

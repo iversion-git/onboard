@@ -162,13 +162,13 @@ export const statusHandler: RouteHandler = async (req, res) => {
       }
 
       if (!stackStatus) {
-        logger.warn('CloudFormation stack not found', {
+        logger.warn('CloudFormation stack not found - cluster may have been manually deleted', {
           correlationId: req.correlationId,
           clusterId,
           deploymentId: cluster.deployment_id,
         });
 
-        // Update cluster status to reflect missing stack
+        // Update cluster status to In-Active when stack is not found
         await dynamoClient.send(new UpdateCommand({
           TableName: tables.clusters,
           Key: { cluster_id: clusterId },
@@ -179,7 +179,7 @@ export const statusHandler: RouteHandler = async (req, res) => {
             '#updated_at': 'updated_at'
           },
           ExpressionAttributeValues: {
-            ':status': 'Failed',
+            ':status': 'In-Active',
             ':deployment_status': 'STACK_NOT_FOUND',
             ':updated_at': new Date().toISOString()
           }
@@ -189,13 +189,13 @@ export const statusHandler: RouteHandler = async (req, res) => {
           success: true,
           data: {
             cluster_id: clusterId,
-            cluster_status: 'Failed',
+            cluster_status: 'In-Active',
             deployment_status: 'STACK_NOT_FOUND',
             deployment_id: cluster.deployment_id,
             stack_outputs: {},
             last_updated: new Date().toISOString(),
             deployed_at: cluster.deployed_at,
-            error: 'CloudFormation stack not found',
+            message: 'CloudFormation stack not found - cluster may have been manually deleted',
           },
           timestamp: new Date().toISOString(),
         });

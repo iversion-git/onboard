@@ -243,6 +243,7 @@ Resources:
   
   VPC:
     Type: AWS::EC2::VPC
+    DeletionPolicy: Retain
     Properties:
       CidrBlock: !Ref VpcCIDR
       EnableDnsSupport: true
