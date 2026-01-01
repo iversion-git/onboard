@@ -8,7 +8,8 @@ import {
   createHandler, 
   deployHandler,
   statusHandler,
-  deleteHandler 
+  deleteHandler,
+  updateHandler 
 } from '../handlers/cluster/index.js';
 
 export function registerClusterRoutes(router: InternalRouter): void {
@@ -34,6 +35,13 @@ export function registerClusterRoutes(router: InternalRouter): void {
     authMiddleware(),
     requireAdmin,
     deployHandler
+  );
+
+  // POST /cluster/{id}/update - Update existing cluster infrastructure (admin only)
+  router.post('/cluster/:id/update',
+    authMiddleware(),
+    requireAdmin,
+    updateHandler
   );
 
   // GET /cluster/{id}/status - Get cluster deployment status (admin only)

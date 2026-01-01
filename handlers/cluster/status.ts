@@ -81,8 +81,51 @@ export const statusHandler: RouteHandler = async (req, res) => {
 
     const cluster = clusterResult.Item;
 
-    // If cluster has no deployment ID, return cluster status only
+    // If cluster has no deployment ID, ensure status is In-Active
     if (!cluster.deployment_id) {
+      // Any cluster without a deployment_id should be In-Active (no active infrastructure)
+      if (cluster.status !== 'In-Active') {
+        logger.info('Resetting cluster with no deployment_id to In-Active', {
+          correlationId: req.correlationId,
+          clusterId,
+          currentStatus: cluster.status,
+          reason: 'No active CloudFormation deployment'
+        });
+
+        // Update cluster status to In-Active
+        await dynamoClient.send(new UpdateCommand({
+          TableName: tables.clusters,
+          Key: { cluster_id: clusterId },
+          UpdateExpression: 'SET #status = :status, #deployment_status = :deployment_status, #updated_at = :updated_at',
+          ExpressionAttributeNames: {
+            '#status': 'status',
+            '#deployment_status': 'deployment_status',
+            '#updated_at': 'updated_at'
+          },
+          ExpressionAttributeValues: {
+            ':status': 'In-Active',
+            ':deployment_status': 'NOT_DEPLOYED',
+            ':updated_at': new Date().toISOString()
+          }
+        }));
+
+        res.status(200).json({
+          success: true,
+          data: {
+            cluster_id: clusterId,
+            cluster_status: 'In-Active',
+            deployment_status: 'NOT_DEPLOYED',
+            deployment_id: null,
+            stack_outputs: {},
+            last_updated: new Date().toISOString(),
+            deployed_at: cluster.deployed_at,
+            message: 'Cluster status reset to In-Active (no active deployment)',
+          },
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+
       logger.info('Cluster status retrieved (no deployment)', {
         correlationId: req.correlationId,
         clusterId,

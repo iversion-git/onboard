@@ -243,7 +243,7 @@ Resources:
   
   VPC:
     Type: AWS::EC2::VPC
-    DeletionPolicy: Retain
+    DeletionPolicy: Delete
     Properties:
       CidrBlock: !Ref VpcCIDR
       EnableDnsSupport: true
@@ -535,7 +535,7 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName}-NATGatewayEIP-AZ1
         - Key: Environment
-          Value: !Ref EnvironmentName
+          Value: !Ref ClusterEnvironment
         - Key: ManagedBy
           Value: CloudFormation
         - !If
@@ -565,7 +565,7 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName}-NATGatewayEIP-AZ2
         - Key: Environment
-          Value: !Ref EnvironmentName
+          Value: !Ref ClusterEnvironment
         - Key: ManagedBy
           Value: CloudFormation
         - !If
@@ -595,7 +595,7 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName}-NATGatewayEIP-AZ3
         - Key: Environment
-          Value: !Ref EnvironmentName
+          Value: !Ref ClusterEnvironment
         - Key: ManagedBy
           Value: CloudFormation
         - !If
@@ -625,7 +625,7 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName}-NATGateway-AZ1
         - Key: Environment
-          Value: !Ref EnvironmentName
+          Value: !Ref ClusterEnvironment
         - Key: ManagedBy
           Value: CloudFormation
         - !If
@@ -655,7 +655,7 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName}-NATGateway-AZ2
         - Key: Environment
-          Value: !Ref EnvironmentName
+          Value: !Ref ClusterEnvironment
         - Key: ManagedBy
           Value: CloudFormation
         - !If
@@ -685,7 +685,7 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName}-NATGateway-AZ3
         - Key: Environment
-          Value: !Ref EnvironmentName
+          Value: !Ref ClusterEnvironment
         - Key: ManagedBy
           Value: CloudFormation
         - !If
@@ -719,7 +719,7 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName}-PrivateAppSubnet-AZ1
         - Key: Environment
-          Value: !Ref EnvironmentName
+          Value: !Ref ClusterEnvironment
         - Key: ManagedBy
           Value: CloudFormation
         - Key: Zone
@@ -752,7 +752,7 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName}-PrivateAppSubnet-AZ2
         - Key: Environment
-          Value: !Ref EnvironmentName
+          Value: !Ref ClusterEnvironment
         - Key: ManagedBy
           Value: CloudFormation
         - Key: Zone
@@ -785,7 +785,7 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName}-PrivateAppSubnet-AZ3
         - Key: Environment
-          Value: !Ref EnvironmentName
+          Value: !Ref ClusterEnvironment
         - Key: ManagedBy
           Value: CloudFormation
         - Key: Zone
@@ -819,7 +819,7 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName}-PrivateAppRouteTable-AZ1
         - Key: Environment
-          Value: !Ref EnvironmentName
+          Value: !Ref ClusterEnvironment
         - Key: ManagedBy
           Value: CloudFormation
         - Key: Zone
@@ -850,7 +850,7 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName}-PrivateAppRouteTable-AZ2
         - Key: Environment
-          Value: !Ref EnvironmentName
+          Value: !Ref ClusterEnvironment
         - Key: ManagedBy
           Value: CloudFormation
         - Key: Zone
@@ -881,7 +881,7 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName}-PrivateAppRouteTable-AZ3
         - Key: Environment
-          Value: !Ref EnvironmentName
+          Value: !Ref ClusterEnvironment
         - Key: ManagedBy
           Value: CloudFormation
         - Key: Zone
@@ -985,7 +985,7 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName}-PrivateDBSubnet-AZ1
         - Key: Environment
-          Value: !Ref EnvironmentName
+          Value: !Ref ClusterEnvironment
         - Key: ManagedBy
           Value: CloudFormation
         - Key: Zone
@@ -1018,7 +1018,7 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName}-PrivateDBSubnet-AZ2
         - Key: Environment
-          Value: !Ref EnvironmentName
+          Value: !Ref ClusterEnvironment
         - Key: ManagedBy
           Value: CloudFormation
         - Key: Zone
@@ -1051,7 +1051,7 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName}-PrivateDBSubnet-AZ3
         - Key: Environment
-          Value: !Ref EnvironmentName
+          Value: !Ref ClusterEnvironment
         - Key: ManagedBy
           Value: CloudFormation
         - Key: Zone
@@ -1084,7 +1084,7 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName}-PrivateDBRouteTable
         - Key: Environment
-          Value: !Ref EnvironmentName
+          Value: !Ref ClusterEnvironment
         - Key: ManagedBy
           Value: CloudFormation
         - Key: Zone
@@ -1133,48 +1133,7 @@ Resources:
   # Security Groups
   # ==========================================
   
-  # ALB Security Group for Public Zone
-  ALBSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupName: !Sub ${EnvironmentName}-ALBSecurityGroup
-      GroupDescription: Security group for Application Load Balancers in Public Zone
-      VpcId: !Ref VPC
-      SecurityGroupIngress:
-        # Allow HTTPS traffic from CloudFront
-        # Note: Using 0.0.0.0/0 for CloudFront. In production, consider:
-        # 1. Using AWS managed prefix list for CloudFront
-        # 2. Adding custom headers and validating them in ALB
-        # 3. Using AWS WAF for additional protection
-        - IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          CidrIp: 0.0.0.0/0
-          Description: Allow HTTPS from CloudFront IP ranges
-      Tags:
-        - Key: Name
-          Value: !Sub ${EnvironmentName}-ALBSecurityGroup
-        - Key: Environment
-          Value: !Ref EnvironmentName
-        - Key: ManagedBy
-          Value: CloudFormation
-        - Key: Zone
-          Value: Public
-        - !If
-          - HasProjectName
-          - Key: Project
-            Value: !Ref ProjectName
-          - !Ref AWS::NoValue
-        - !If
-          - HasCostCenter
-          - Key: CostCenter
-            Value: !Ref CostCenter
-          - !Ref AWS::NoValue
-        - !If
-          - HasOwner
-          - Key: Owner
-            Value: !Ref Owner
-          - !Ref AWS::NoValue
+
 
   # App Security Group for Private App Zone
   AppSecurityGroup:
@@ -1183,13 +1142,6 @@ Resources:
       GroupName: !Sub ${EnvironmentName}-AppSecurityGroup
       GroupDescription: Security group for application workloads (ECS tasks, Lambda functions) in Private App Zone
       VpcId: !Ref VPC
-      SecurityGroupIngress:
-        # Allow HTTP traffic from ALB Security Group
-        - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          SourceSecurityGroupId: !Ref ALBSecurityGroup
-          Description: Allow HTTP from ALB Security Group
       SecurityGroupEgress:
         # Allow HTTPS traffic to internet
         - IpProtocol: tcp
@@ -1207,7 +1159,7 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName}-AppSecurityGroup
         - Key: Environment
-          Value: !Ref EnvironmentName
+          Value: !Ref ClusterEnvironment
         - Key: ManagedBy
           Value: CloudFormation
         - Key: Zone
@@ -1240,7 +1192,7 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName}-DBSecurityGroup
         - Key: Environment
-          Value: !Ref EnvironmentName
+          Value: !Ref ClusterEnvironment
         - Key: ManagedBy
           Value: CloudFormation
         - Key: Zone
@@ -1294,16 +1246,7 @@ Resources:
       DestinationSecurityGroupId: !Ref DBSecurityGroup
       Description: Allow Vault to DB Security Group
 
-  # Outbound rule for ALB Security Group to App Security Group
-  ALBSecurityGroupEgressHTTP:
-    Type: AWS::EC2::SecurityGroupEgress
-    Properties:
-      GroupId: !Ref ALBSecurityGroup
-      IpProtocol: tcp
-      FromPort: 80
-      ToPort: 80
-      DestinationSecurityGroupId: !Ref AppSecurityGroup
-      Description: Allow HTTP to App Security Group
+
 
   # ==========================================
   # DB Security Group Inbound Rules
@@ -1341,6 +1284,163 @@ Resources:
       ToPort: 8200
       SourceSecurityGroupId: !Ref AppSecurityGroup
       Description: Allow Vault from App Security Group
+
+  # ==========================================
+  # Aurora MySQL Serverless v2 Database
+  # ==========================================
+  
+  # DB Subnet Group for Aurora
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    DeletionPolicy: Delete
+    Properties:
+      DBSubnetGroupName: !Sub ${EnvironmentName}-db-subnet-group
+      DBSubnetGroupDescription: Subnet group for Aurora MySQL cluster
+      SubnetIds: !If
+        - UseAZ3
+        - - !Ref PrivateDBSubnet1
+          - !Ref PrivateDBSubnet2
+          - !Ref PrivateDBSubnet3
+        - !If
+          - UseAZ2
+          - - !Ref PrivateDBSubnet1
+            - !Ref PrivateDBSubnet2
+          - - !Ref PrivateDBSubnet1
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-db-subnet-group
+        - Key: Type
+          Value: !Ref ClusterType
+        - Key: Environment
+          Value: !Ref ClusterEnvironment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+
+
+  # Aurora MySQL Serverless v2 Cluster
+  AuroraCluster:
+    Type: AWS::RDS::DBCluster
+    DeletionPolicy: Delete
+    DependsOn:
+      - DBSubnetGroup
+      - DBSecurityGroup
+    Properties:
+      DBClusterIdentifier: !Sub ${EnvironmentName}-aurora-mysql
+      Engine: aurora-mysql
+      EngineMode: provisioned
+      ServerlessV2ScalingConfiguration:
+        MinCapacity: 0.5
+        MaxCapacity: 128
+      MasterUsername: admin
+      ManageMasterUserPassword: true
+      DatabaseName: appdb
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VpcSecurityGroupIds:
+        - !Ref DBSecurityGroup
+      BackupRetentionPeriod: 7
+      PreferredBackupWindow: "03:00-04:00"
+      PreferredMaintenanceWindow: "sun:04:00-sun:05:00"
+      EnableCloudwatchLogsExports:
+        - error
+        - general
+        - slowquery
+      DeletionProtection: false
+      StorageEncrypted: true
+      StorageType: aurora-iopt1
+      CopyTagsToSnapshot: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-aurora-mysql
+        - Key: Type
+          Value: !Ref ClusterType
+        - Key: Environment
+          Value: !Ref ClusterEnvironment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # Aurora MySQL Writer Instance
+  AuroraWriterInstance:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Delete
+    Properties:
+      DBInstanceIdentifier: !Sub ${EnvironmentName}-aurora-writer
+      DBClusterIdentifier: !Ref AuroraCluster
+      DBInstanceClass: db.serverless
+      Engine: aurora-mysql
+      PubliclyAccessible: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-aurora-writer
+        - Key: Type
+          Value: !Ref ClusterType
+        - Key: Environment
+          Value: !Ref ClusterEnvironment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # RDS Proxy for Connection Pooling
+  DBProxyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${EnvironmentName}-rds-proxy-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: rds.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: SecretsManagerAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:DescribeSecret
+                Resource: !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:rds-db-credentials/*'
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-rds-proxy-role
+        - Key: Type
+          Value: !Ref ClusterType
+        - Key: Environment
+          Value: !Ref ClusterEnvironment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  DBProxy:
+    Type: AWS::RDS::DBProxy
+    DeletionPolicy: Delete
+    DependsOn: 
+      - AuroraCluster
+    Properties:
+      DBProxyName: !Sub ${EnvironmentName}-aurora-proxy
+      EngineFamily: MYSQL
+      Auth:
+        - AuthScheme: SECRETS
+          SecretArn: !GetAtt AuroraCluster.MasterUserSecret.SecretArn
+      RoleArn: !GetAtt DBProxyRole.Arn
+      VpcSubnetIds:
+        - !Ref PrivateDBSubnet1
+        - !Ref PrivateDBSubnet2
+      VpcSecurityGroupIds:
+        - !Ref DBSecurityGroup
+      RequireTLS: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-aurora-proxy
+
+  DBProxyTargetGroup:
+    Type: AWS::RDS::DBProxyTargetGroup
+    DeletionPolicy: Delete
+    Properties:
+      DBProxyName: !Ref DBProxy
+      TargetGroupName: default
+      DBClusterIdentifiers:
+        - !Ref AuroraCluster
 
 Outputs:
   # VPC Outputs
@@ -1556,12 +1656,6 @@ Outputs:
       Name: !Sub ${EnvironmentName}-PrivateDBRouteTable
 
   # Security Group Outputs
-  ALBSecurityGroup:
-    Description: ALB Security Group ID for Public Zone
-    Value: !Ref ALBSecurityGroup
-    Export:
-      Name: !Sub ${EnvironmentName}-ALBSecurityGroup
-
   AppSecurityGroup:
     Description: App Security Group ID for Private App Zone
     Value: !Ref AppSecurityGroup
@@ -1573,6 +1667,37 @@ Outputs:
     Value: !Ref DBSecurityGroup
     Export:
       Name: !Sub ${EnvironmentName}-DBSecurityGroup
+
+  # Database Outputs
+  AuroraClusterEndpoint:
+    Description: Aurora MySQL cluster endpoint
+    Value: !GetAtt AuroraCluster.Endpoint.Address
+    Export:
+      Name: !Sub ${EnvironmentName}-AuroraClusterEndpoint
+
+  AuroraClusterReadEndpoint:
+    Description: Aurora MySQL cluster read endpoint
+    Value: !GetAtt AuroraCluster.ReadEndpoint.Address
+    Export:
+      Name: !Sub ${EnvironmentName}-AuroraClusterReadEndpoint
+
+  DBProxyEndpoint:
+    Description: RDS Proxy endpoint for connection pooling
+    Value: !GetAtt DBProxy.Endpoint
+    Export:
+      Name: !Sub ${EnvironmentName}-DBProxyEndpoint
+
+  DBSecretArn:
+    Description: ARN of the database password secret (AWS managed)
+    Value: !GetAtt AuroraCluster.MasterUserSecret.SecretArn
+    Export:
+      Name: !Sub ${EnvironmentName}-DBSecretArn
+
+  DatabaseName:
+    Description: Default database name
+    Value: appdb
+    Export:
+      Name: !Sub ${EnvironmentName}-DatabaseName
 
   # Template metadata
   TemplateVersion:

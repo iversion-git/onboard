@@ -528,6 +528,60 @@ Error responses:
 
 ---
 
+### POST /cluster/{cluster_id}/update
+**Description**: Update existing cluster infrastructure using CloudFormation (admin only)
+
+**Authentication**: ✅ Required (Admin only)
+
+**Security**: Only clusters that have been previously deployed can be updated. Clusters currently deploying cannot be updated.
+
+**Query Parameters** (All optional):
+- `cross_account_config`: JSON string containing cross-account configuration for updates
+- `parameters`: JSON string containing additional CloudFormation parameters  
+- `tags`: JSON string containing additional resource tags
+
+**Request Body**: None
+
+**Success Response (200)**:
+```json
+{
+  "success": true,
+  "data": {
+    "cluster_id": "550e8400-e29b-41d4-a716-446655440004",
+    "deployment_id": "arn:aws:cloudformation:us-east-1:123456789012:stack/cluster-prod/12345678",
+    "stack_name": "cluster-prod-550e8400",
+    "status": "UPDATE_IN_PROGRESS", 
+    "template_url": "https://s3.amazonaws.com/templates/shared-cluster-template.yaml",
+    "initiated_at": "2025-12-26T05:00:00.000Z",
+    "message": "Cluster update initiated successfully"
+  },
+  "timestamp": "2025-12-26T05:00:00.000Z"
+}
+```
+
+**What the Update Does**:
+- Re-runs the CloudFormation template against the existing stack
+- Applies any template changes or updates  
+- Fixes configuration drift back to template definition
+- Maintains all existing resources and data
+- Preserves delete protection settings
+
+**Use Cases**:
+- Apply template updates or improvements
+- Fix configuration drift
+- Update resource configurations
+- Apply security patches or updates
+
+**Error Responses**:
+- `401 Unauthorized` - Missing or invalid JWT token
+- `403 Forbidden` - Insufficient permissions (not admin)
+- `404 NotFound` - Cluster not found
+- `400 BadRequest` - Cluster has never been deployed
+- `409 Conflict` - Cluster is currently deploying
+- `500 InternalError` - CloudFormation update failed
+
+---
+
 ### GET /cluster/{cluster_id}/status
 **Description**: Check cluster deployment status (admin only)
 
@@ -556,8 +610,18 @@ Error responses:
     "deployment_status": "CREATE_COMPLETE",
     "deployment_id": "arn:aws:cloudformation:us-east-1:123456789012:stack/cluster-prod/12345678",
     "stack_outputs": {
-      "VpcId": "vpc-12345678",
-      "SubnetIds": ["subnet-12345678", "subnet-87654321"]
+      "VPC": "vpc-12345678",
+      "VPCCidr": "10.0.0.0/16",
+      "PublicSubnets": "subnet-12345678,subnet-87654321",
+      "PrivateAppSubnets": "subnet-11111111,subnet-22222222",
+      "PrivateDBSubnets": "subnet-33333333,subnet-44444444",
+      "AppSecurityGroup": "sg-app12345",
+      "DBSecurityGroup": "sg-db12345",
+      "AuroraClusterEndpoint": "cluster-prod.cluster-xyz.ap-southeast-2.rds.amazonaws.com",
+      "AuroraClusterReadEndpoint": "cluster-prod.cluster-ro-xyz.ap-southeast-2.rds.amazonaws.com",
+      "DBProxyEndpoint": "cluster-prod-proxy.proxy-xyz.ap-southeast-2.rds.amazonaws.com",
+      "DBSecretArn": "arn:aws:secretsmanager:ap-southeast-2:123456789012:secret:cluster-prod-aurora-mysql-password-AbCdEf",
+      "DatabaseName": "appdb"
     },
     "last_updated": "2025-12-26T05:15:00.000Z",
     "deployed_at": "2025-12-26T05:15:00.000Z",
@@ -688,6 +752,67 @@ Error responses:
   ```
 
 **Recommendation**: Use S3 storage for production flexibility and proper template versioning.
+
+## Infrastructure Components
+
+### Network Architecture
+Both dedicated and shared cluster templates create a three-tier VPC architecture:
+
+**Public Zone**:
+- Internet Gateway for external connectivity
+- Public subnets across multiple Availability Zones
+- NAT Gateways for outbound internet access from private zones
+
+**Private App Zone**:
+- Private subnets for application workloads (ECS, Lambda)
+- Route tables with NAT Gateway routes for internet access
+- App Security Group allowing outbound HTTPS/HTTP traffic
+
+**Private DB Zone**:
+- Private subnets for database resources
+- No internet access (isolated network zone)
+- DB Security Group with restricted access from App Zone only
+
+### Database Infrastructure
+
+**Aurora MySQL Serverless v2**:
+- Engine: `aurora-mysql` version `8.0.mysql_aurora.3.02.0`
+- Scaling: 0.5 to 128 ACU (Aurora Capacity Units)
+- Configuration: Write instance only (no read replicas)
+- Backup: 7-day retention with automated backups
+- Maintenance: Sunday 04:00-05:00 UTC window
+- Security: Encryption at rest, deletion protection enabled
+- Monitoring: CloudWatch logs for errors, general, and slow queries
+
+**RDS Proxy for Connection Pooling**:
+- Engine Family: MySQL
+- Authentication: AWS Secrets Manager integration
+- Security: TLS required for all connections
+- Connection Management: 100% max connections, 50% max idle connections
+- Timeout: 30-minute idle client timeout
+
+**Secrets Management**:
+- Master password stored in AWS Secrets Manager
+- Auto-generated 32-character password with special character exclusions
+- Integrated with RDS Proxy for seamless authentication
+
+**Network Security**:
+- Database resources deployed in Private DB Zone only
+- Security groups restrict access to port 3306 from App Zone only
+- No direct internet access or public endpoints
+
+### Security Groups Configuration
+
+**App Security Group**:
+- Outbound: HTTPS (443) and HTTP (80) to internet
+- Outbound: MySQL (3306), Redis (6379), Vault (8200) to DB Security Group
+- No inbound rules (applications initiate connections)
+
+**DB Security Group**:
+- Inbound: MySQL (3306), Redis (6379), Vault (8200) from App Security Group only
+- No outbound rules (databases don't initiate external connections)
+
+**Note**: ALB Security Group has been removed as Load Balancers are not part of the current architecture.
 
 ## Cross-Account IAM Role Configuration
 
