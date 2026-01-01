@@ -16,15 +16,49 @@ const BUCKET_NAME = `aws-lambda-control-plane-templates-${STAGE}`;
 
 // Template files to upload
 const TEMPLATES = [
+  // Main orchestration templates
   {
-    localPath: 'dedicated-cluster-template.yaml',
-    s3Key: 'dedicated-cluster-template.yaml',
-    description: 'Dedicated cluster CloudFormation template'
+    localPath: 'stacks/shared-main-template.yaml',
+    s3Key: 'shared-main-template.yaml',
+    description: 'Shared cluster main template (orchestrates nested stacks)'
   },
   {
-    localPath: 'shared-cluster-template.yaml', 
+    localPath: 'stacks/dedicated-main-template.yaml',
+    s3Key: 'dedicated-main-template.yaml',
+    description: 'Dedicated cluster main template (orchestrates nested stacks)'
+  },
+  // Shared cluster nested templates
+  {
+    localPath: 'stacks/shared-infrastructure-template.yaml',
+    s3Key: 'shared-infrastructure-template.yaml',
+    description: 'Shared cluster infrastructure template (VPC, subnets, security groups)'
+  },
+  {
+    localPath: 'stacks/shared-database-template.yaml',
+    s3Key: 'shared-database-template.yaml',
+    description: 'Shared cluster database template (Aurora MySQL, RDS Proxy)'
+  },
+  // Dedicated cluster nested templates
+  {
+    localPath: 'stacks/dedicated-infrastructure-template.yaml',
+    s3Key: 'dedicated-infrastructure-template.yaml',
+    description: 'Dedicated cluster infrastructure template (VPC, subnets, security groups)'
+  },
+  {
+    localPath: 'stacks/dedicated-database-template.yaml',
+    s3Key: 'dedicated-database-template.yaml',
+    description: 'Dedicated cluster database template (Aurora MySQL, RDS Proxy)'
+  },
+  // Legacy templates (for backward compatibility)
+  {
+    localPath: 'stacks/dedicated-cluster-template.yaml',
+    s3Key: 'dedicated-cluster-template.yaml',
+    description: 'Dedicated cluster CloudFormation template (legacy - full stack)'
+  },
+  {
+    localPath: 'stacks/shared-cluster-template.yaml', 
     s3Key: 'shared-cluster-template.yaml',
-    description: 'Shared cluster CloudFormation template'
+    description: 'Shared cluster CloudFormation template (legacy - full stack)'
   }
 ];
 
@@ -45,7 +79,10 @@ async function uploadTemplate(s3Client, template) {
       Metadata: {
         'template-name': path.basename(template.s3Key, '.yaml'),
         'template-version': '1.0.0',
-        'template-type': template.s3Key.includes('dedicated') ? 'dedicated' : 'shared',
+        'template-type': template.s3Key.includes('main') ? 'main' :
+                        template.s3Key.includes('infrastructure') ? 'infrastructure' : 
+                        template.s3Key.includes('database') ? 'database' :
+                        template.s3Key.includes('dedicated') ? 'dedicated' : 'shared',
         'template-description': template.description,
         'created-at': new Date().toISOString(),
         'updated-at': new Date().toISOString()

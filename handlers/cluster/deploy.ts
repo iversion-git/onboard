@@ -107,8 +107,8 @@ export const deployHandler: RouteHandler = async (req, res) => {
     try {
       const config = getConfig();
       
-      // Determine template key based on cluster type
-      const templateKey = `${cluster.type}-cluster-template.yaml`;
+      // Use main template that orchestrates nested stacks based on cluster type
+      const templateKey = `${cluster.type}-main-template.yaml`;
       
       // Get S3 template manager
       const templateManager = getS3TemplateManager(config.s3.templateBucket);
@@ -131,15 +131,13 @@ export const deployHandler: RouteHandler = async (req, res) => {
       const defaultParameters = [
         { ParameterKey: 'EnvironmentName', ParameterValue: cluster.name },
         { ParameterKey: 'VpcCIDR', ParameterValue: cluster.cidr },
+        { ParameterKey: 'TemplateS3Bucket', ParameterValue: config.s3.templateBucket },
+        { ParameterKey: 'TemplateS3KeyPrefix', ParameterValue: '' }, // No prefix for now
         // Cluster-specific parameters for tagging
         { ParameterKey: 'ClusterName', ParameterValue: cluster.name },
         { ParameterKey: 'ClusterType', ParameterValue: cluster.type === 'dedicated' ? 'Dedicated' : 'Shared' },
         { ParameterKey: 'ClusterEnvironment', ParameterValue: cluster.environment },
-        // Public subnet CIDRs
-        { ParameterKey: 'PublicSubnet1CIDR', ParameterValue: subnets.public[0] },
-        { ParameterKey: 'PublicSubnet2CIDR', ParameterValue: subnets.public[1] },
-        { ParameterKey: 'PublicSubnet3CIDR', ParameterValue: subnets.public[2] },
-        // Private App subnet CIDRs
+        // Private App subnet CIDRs (no public subnets needed)
         { ParameterKey: 'PrivateAppSubnet1CIDR', ParameterValue: subnets.privateApp[0] },
         { ParameterKey: 'PrivateAppSubnet2CIDR', ParameterValue: subnets.privateApp[1] },
         { ParameterKey: 'PrivateAppSubnet3CIDR', ParameterValue: subnets.privateApp[2] },
