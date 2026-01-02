@@ -36,7 +36,12 @@ const TEMPLATES = [
   {
     localPath: 'stacks/shared-database-template.yaml',
     s3Key: 'shared-database-template.yaml',
-    description: 'Shared cluster database template (Aurora MySQL, RDS Proxy)'
+    description: 'Shared cluster database template (Aurora MySQL, RDS Proxy, Redis)'
+  },
+  {
+    localPath: 'stacks/shared-app-template.yaml',
+    s3Key: 'shared-app-template.yaml',
+    description: 'Shared cluster application template (Laravel Lambda, API Gateway, SQS)'
   },
   // Dedicated cluster nested templates
   {
@@ -82,6 +87,7 @@ async function uploadTemplate(s3Client, template) {
         'template-type': template.s3Key.includes('main') ? 'main' :
                         template.s3Key.includes('infrastructure') ? 'infrastructure' : 
                         template.s3Key.includes('database') ? 'database' :
+                        template.s3Key.includes('app') ? 'application' :
                         template.s3Key.includes('dedicated') ? 'dedicated' : 'shared',
         'template-description': template.description,
         'created-at': new Date().toISOString(),

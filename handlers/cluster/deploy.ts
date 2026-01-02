@@ -133,6 +133,7 @@ export const deployHandler: RouteHandler = async (req, res) => {
         { ParameterKey: 'VpcCIDR', ParameterValue: cluster.cidr },
         { ParameterKey: 'TemplateS3Bucket', ParameterValue: config.s3.templateBucket },
         { ParameterKey: 'TemplateS3KeyPrefix', ParameterValue: '' }, // No prefix for now
+        { ParameterKey: 'CodeBucketName', ParameterValue: cluster.code_bucket }, // Lambda code bucket
         // Cluster-specific parameters for tagging
         { ParameterKey: 'ClusterName', ParameterValue: cluster.name },
         { ParameterKey: 'ClusterType', ParameterValue: cluster.type === 'dedicated' ? 'Dedicated' : 'Shared' },

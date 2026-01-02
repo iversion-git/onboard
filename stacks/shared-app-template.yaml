@@ -1,0 +1,432 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Shared cluster application stack - Bref PHP 8.2 (Laravel), HTTP API, SQS, Scheduler->SQS, private S3 bucket.
+  Lambda code pulled from cluster code bucket (static key lambda-api.zip).
+  Integrates with infrastructure and database stacks via CloudFormation imports.
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Description: Environment identifier (must match infrastructure and database stacks)
+    MinLength: 1
+    MaxLength: 50
+    AllowedPattern: ^[a-zA-Z][a-zA-Z0-9-]*$
+    ConstraintDescription: Must begin with a letter and contain only alphanumeric characters and hyphens
+
+  AppName:
+    Type: String
+    Default: flowrix
+    Description: Application name for resource naming
+
+  Stage:
+    Type: String
+    Default: prod
+    Description: Deployment stage (prod, staging, dev)
+
+  # Code bucket name from cluster record (passed from main template)
+  CodeBucketName:
+    Type: String
+    Description: S3 bucket name containing lambda-api.zip (from cluster code_bucket field)
+    MinLength: 1
+    ConstraintDescription: Must specify the code bucket name
+
+  QueueName:
+    Type: String
+    Default: prod-sqs
+    Description: SQS queue name for Laravel job processing
+
+  ProjectName:
+    Type: String
+    Description: Optional project name for resource tagging
+    Default: ""
+    MaxLength: 100
+
+  CostCenter:
+    Type: String
+    Description: Optional cost center identifier for resource tagging
+    Default: ""
+    MaxLength: 100
+
+  Owner:
+    Type: String
+    Description: Optional owner or team name for resource tagging
+    Default: ""
+    MaxLength: 100
+
+  # Cluster-specific parameters for tagging
+  ClusterName:
+    Type: String
+    Description: Name of the cluster for resource tagging
+    MinLength: 1
+    MaxLength: 255
+
+  ClusterType:
+    Type: String
+    Description: Type of cluster (Shared or Dedicated) for resource tagging
+    AllowedValues:
+      - Shared
+      - Dedicated
+    ConstraintDescription: Must be either Shared or Dedicated
+
+  ClusterEnvironment:
+    Type: String
+    Description: Environment of cluster (Production, Staging, or Dev) for resource tagging
+    AllowedValues:
+      - Production
+      - Staging
+      - Dev
+    ConstraintDescription: Must be Production, Staging, or Dev
+
+Conditions:
+  # Conditions for optional custom tags
+  HasProjectName: !Not [!Equals [!Ref ProjectName, '']]
+  HasCostCenter: !Not [!Equals [!Ref CostCenter, '']]
+  HasOwner: !Not [!Equals [!Ref Owner, '']]
+
+Globals:
+  Function:
+    Runtime: provided.al2
+    Architectures: [x86_64]
+    MemorySize: 1024
+    Timeout: 30
+    VpcConfig:
+      SecurityGroupIds:
+        - !ImportValue
+          'Fn::Sub': '${EnvironmentName}-LambdaSecurityGroup'
+      SubnetIds: !Split
+        - ','
+        - !ImportValue
+          'Fn::Sub': '${EnvironmentName}-PrivateAppSubnets'
+    Layers:
+      # Bref PHP 8.2 + common extensions + Laravel bridge
+      - !Sub "arn:aws:lambda:${AWS::Region}:534081306603:layer:bref-php-82:1"
+      - !Sub "arn:aws:lambda:${AWS::Region}:534081306603:layer:bref-extra-php-82:1"
+      - !Sub "arn:aws:lambda:${AWS::Region}:534081306603:layer:bref-laravel-bridge:1"
+    Environment:
+      Variables:
+        # --- Derived from deployment ---
+        AWS_EVENT_BRIDGE_ARN: !GetAtt AppQueue.Arn
+        AWS_EVENT_BRIDGE_ROLE_ARN: !GetAtt SchedulerToSqsRole.Arn
+        AWS_BUCKET: !Ref PrivateDataBucket
+        AWS_S3_REGION: !Ref AWS::Region
+        # SQS (Laravel expects these in some setups)
+        SQS_PREFIX: !Sub "https://sqs.${AWS::Region}.amazonaws.com/${AWS::AccountId}"
+        SQS_QUEUE: !Ref QueueName
+        SQS_QUEUE_URL: !Ref AppQueue
+        # Compat / app usage
+        PRIVATE_BUCKET: !Ref PrivateDataBucket
+        # From DB stack output (Redis endpoint)
+        REDIS_HOST: !ImportValue
+          'Fn::Sub': '${EnvironmentName}-RedisEndpoint'
+        # Database connection (RDS Proxy endpoint)
+        DB_HOST: !ImportValue
+          'Fn::Sub': '${EnvironmentName}-DBProxyEndpoint'
+        DB_PORT: "3306"
+        DB_DATABASE: !ImportValue
+          'Fn::Sub': '${EnvironmentName}-DatabaseName'
+        # Fixed Laravel settings
+        CACHE_DRIVER: redis
+        JWT_SECRET: "mE8q2wXv7Kp1Zt9Rj4Nf0aHs6Ld3cYuB"
+        LOG_CHANNEL: stderr
+        QUEUE_CONNECTION: sqs
+        REDIS_CLIENT: predis
+        REDIS_PORT: "6379"
+        REDIS_SCHEME: tls
+        SESSION_DRIVER: redis
+    Tags:
+      Name: !Sub ${ClusterName}-Lambda
+      Type: !Ref ClusterType
+      Environment: !Ref ClusterEnvironment
+      ManagedBy: CloudFormation
+
+Resources:
+  # -----------------------
+  # Private S3 bucket for tenant data (per-tenant "folders" are key prefixes)
+  # -----------------------
+  PrivateDataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${AppName}-private-${AWS::AccountId}-${AWS::Region}-${Stage}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      Tags:
+        - Key: Name
+          Value: !Sub ${ClusterName}-PrivateDataBucket
+        - Key: Type
+          Value: !Ref ClusterType
+        - Key: Environment
+          Value: !Ref ClusterEnvironment
+        - Key: ManagedBy
+          Value: CloudFormation
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  # -----------------------
+  # SQS queue
+  # -----------------------
+  AppQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Ref QueueName
+      VisibilityTimeout: 120
+      Tags:
+        - Key: Name
+          Value: !Sub ${ClusterName}-AppQueue
+        - Key: Type
+          Value: !Ref ClusterType
+        - Key: Environment
+          Value: !Ref ClusterEnvironment
+        - Key: ManagedBy
+          Value: CloudFormation
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  # -----------------------
+  # HTTP API Gateway (HTTP API)
+  # -----------------------
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      Name: !Sub "${AppName}-http-api-${Stage}"
+      StageName: !Ref Stage
+      Tags:
+        Name: !Sub ${ClusterName}-HttpApi
+        Type: !Ref ClusterType
+        Environment: !Ref ClusterEnvironment
+        ManagedBy: CloudFormation
+
+  # -----------------------
+  # Web Lambda (Laravel HTTP)
+  # Code is ALWAYS s3://<CodeBucketName>/lambda-api.zip
+  # -----------------------
+  WebFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${AppName}-web-${Stage}"
+      Handler: public/index.php
+      CodeUri:
+        Bucket: !Ref CodeBucketName
+        Key: lambda-api.zip
+      Events:
+        HttpApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /{proxy+}
+            Method: ANY
+      Policies:
+        - Statement:
+            # App can enqueue jobs
+            - Effect: Allow
+              Action:
+                - sqs:SendMessage
+                - sqs:GetQueueAttributes
+              Resource: !GetAtt AppQueue.Arn
+            # App can read/write tenant private data
+            - Effect: Allow
+              Action: s3:ListBucket
+              Resource: !GetAtt PrivateDataBucket.Arn
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+                - s3:DeleteObject
+              Resource: !Sub "${PrivateDataBucket.Arn}/*"
+
+  # -----------------------
+  # Worker Lambda (SQS consumer; artisan handler)
+  # Code is ALWAYS s3://<CodeBucketName>/lambda-api.zip
+  # -----------------------
+  WorkerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${AppName}-worker-${Stage}"
+      Handler: artisan
+      CodeUri:
+        Bucket: !Ref CodeBucketName
+        Key: lambda-api.zip
+      Timeout: 120
+      Events:
+        QueueEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt AppQueue.Arn
+            BatchSize: 10
+            Enabled: true
+      Policies:
+        - Statement:
+            # Worker consumes SQS
+            - Effect: Allow
+              Action:
+                - sqs:ReceiveMessage
+                - sqs:DeleteMessage
+                - sqs:GetQueueAttributes
+                - sqs:ChangeMessageVisibility
+              Resource: !GetAtt AppQueue.Arn
+            # Worker may also write reports to S3
+            - Effect: Allow
+              Action: s3:ListBucket
+              Resource: !GetAtt PrivateDataBucket.Arn
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+                - s3:DeleteObject
+              Resource: !Sub "${PrivateDataBucket.Arn}/*"
+
+  # -----------------------
+  # EventBridge Scheduler -> SQS (enqueue schedule tick message)
+  # -----------------------
+  SchedulerToSqsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AppName}-scheduler-to-sqs-${Stage}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: scheduler.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: SendMessageToQueue
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: sqs:SendMessage
+                Resource: !GetAtt AppQueue.Arn
+      Tags:
+        - Key: Name
+          Value: !Sub ${ClusterName}-SchedulerRole
+        - Key: Type
+          Value: !Ref ClusterType
+        - Key: Environment
+          Value: !Ref ClusterEnvironment
+        - Key: ManagedBy
+          Value: CloudFormation
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  EnqueueSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: !Sub "${AppName}-enqueue-schedule-${Stage}"
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      ScheduleExpression: "rate(5 minutes)"
+      Target:
+        Arn: !GetAtt AppQueue.Arn
+        RoleArn: !GetAtt SchedulerToSqsRole.Arn
+        Input: |
+          {"type":"artisan","command":"schedule:run"}
+
+Outputs:
+  # API Gateway Outputs
+  ApiUrl:
+    Description: HTTP API endpoint
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/"
+    Export:
+      Name: !Sub ${EnvironmentName}-ApiUrl
+
+  # Lambda Function Outputs
+  WebFunctionName:
+    Description: Lambda function name (web)
+    Value: !Ref WebFunction
+    Export:
+      Name: !Sub ${EnvironmentName}-WebFunctionName
+
+  WorkerFunctionName:
+    Description: Lambda function name (worker)
+    Value: !Ref WorkerFunction
+    Export:
+      Name: !Sub ${EnvironmentName}-WorkerFunctionName
+
+  # SQS Outputs
+  QueueUrl:
+    Description: SQS queue URL
+    Value: !Ref AppQueue
+    Export:
+      Name: !Sub ${EnvironmentName}-QueueUrl
+
+  QueueArn:
+    Description: SQS queue ARN
+    Value: !GetAtt AppQueue.Arn
+    Export:
+      Name: !Sub ${EnvironmentName}-QueueArn
+
+  # S3 Outputs
+  PrivateBucketName:
+    Description: Private data bucket name
+    Value: !Ref PrivateDataBucket
+    Export:
+      Name: !Sub ${EnvironmentName}-PrivateBucketName
+
+  # IAM Outputs
+  SchedulerRoleArn:
+    Description: EventBridge Scheduler role ARN
+    Value: !GetAtt SchedulerToSqsRole.Arn
+    Export:
+      Name: !Sub ${EnvironmentName}-SchedulerRoleArn
+
+  # Utility Outputs
+  SqsPrefix:
+    Description: SQS URL prefix for Laravel configuration
+    Value: !Sub "https://sqs.${AWS::Region}.amazonaws.com/${AWS::AccountId}"
+    Export:
+      Name: !Sub ${EnvironmentName}-SqsPrefix
+
+  # Template metadata
+  TemplateVersion:
+    Description: CloudFormation template version
+    Value: "1.0.0"
+
+  DeploymentArchitecture:
+    Description: Deployment architecture used
+    Value: "Serverless Laravel (Bref + API Gateway + SQS + EventBridge)"

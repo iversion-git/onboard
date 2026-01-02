@@ -209,6 +209,29 @@ Parameters:
     Default: ""
     MaxLength: 100
 
+  # Application Configuration
+  CodeBucketName:
+    Type: String
+    Description: S3 bucket name containing lambda-api.zip (from cluster code_bucket field)
+    Default: manual-api-code-bucketstatic
+    MinLength: 1
+    ConstraintDescription: Must specify the code bucket name
+
+  AppName:
+    Type: String
+    Default: flowrix
+    Description: Application name for resource naming
+
+  Stage:
+    Type: String
+    Default: prod
+    Description: Deployment stage (prod, staging, dev)
+
+  QueueName:
+    Type: String
+    Default: prod-sqs
+    Description: SQS queue name for Laravel job processing
+
   # Cluster-specific parameters for tagging
   ClusterName:
     Type: String
@@ -352,6 +375,56 @@ Resources:
             Value: !Ref Owner
           - !Ref AWS::NoValue
 
+  # ==========================================
+  # Application Nested Stack
+  # ==========================================
+  
+  ApplicationStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: DatabaseStack
+    Properties:
+      TemplateURL: !Sub
+        - 'https://${TemplateS3Bucket}.s3.${AWS::Region}.amazonaws.com/${Prefix}shared-app-template.yaml'
+        - Prefix: !If [HasTemplatePrefix, !Sub '${TemplateS3KeyPrefix}/', '']
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        CodeBucketName: !Ref CodeBucketName
+        AppName: !Ref AppName
+        Stage: !Ref Stage
+        QueueName: !Ref QueueName
+        ProjectName: !Ref ProjectName
+        CostCenter: !Ref CostCenter
+        Owner: !Ref Owner
+        ClusterName: !Ref ClusterName
+        ClusterType: !Ref ClusterType
+        ClusterEnvironment: !Ref ClusterEnvironment
+      Tags:
+        - Key: Name
+          Value: !Sub ${ClusterName}-Application
+        - Key: Type
+          Value: !Ref ClusterType
+        - Key: Environment
+          Value: !Ref ClusterEnvironment
+        - Key: StackType
+          Value: Application
+        - Key: ManagedBy
+          Value: CloudFormation
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
 Outputs:
   # Main Stack Outputs
   MainStackId:
@@ -365,6 +438,10 @@ Outputs:
   DatabaseStackId:
     Description: Database nested stack ID
     Value: !Ref DatabaseStack
+
+  ApplicationStackId:
+    Description: Application nested stack ID
+    Value: !Ref ApplicationStack
 
   # Infrastructure Outputs (passed through from nested stack)
   VPC:
@@ -420,6 +497,36 @@ Outputs:
     Description: Default database name
     Value: !GetAtt DatabaseStack.Outputs.DatabaseName
 
+  # Redis Outputs (passed through from database stack)
+  RedisEndpoint:
+    Description: ElastiCache Serverless Redis endpoint
+    Value: !GetAtt DatabaseStack.Outputs.RedisEndpoint
+
+  RedisPort:
+    Description: ElastiCache Serverless Redis port
+    Value: !GetAtt DatabaseStack.Outputs.RedisPort
+
+  # Application Outputs (passed through from nested stack)
+  ApiUrl:
+    Description: HTTP API endpoint
+    Value: !GetAtt ApplicationStack.Outputs.ApiUrl
+
+  WebFunctionName:
+    Description: Lambda function name (web)
+    Value: !GetAtt ApplicationStack.Outputs.WebFunctionName
+
+  WorkerFunctionName:
+    Description: Lambda function name (worker)
+    Value: !GetAtt ApplicationStack.Outputs.WorkerFunctionName
+
+  QueueUrl:
+    Description: SQS queue URL
+    Value: !GetAtt ApplicationStack.Outputs.QueueUrl
+
+  PrivateBucketName:
+    Description: Private data bucket name
+    Value: !GetAtt ApplicationStack.Outputs.PrivateBucketName
+
   # Template metadata
   TemplateVersion:
     Description: CloudFormation template version
@@ -427,4 +534,4 @@ Outputs:
 
   DeploymentArchitecture:
     Description: Deployment architecture used
-    Value: "Nested Stacks (Infrastructure + Database)"
+    Value: "Nested Stacks (Infrastructure + Database + Application)"
