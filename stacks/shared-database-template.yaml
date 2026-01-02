@@ -440,6 +440,7 @@ Resources:
       Auth:
         - AuthScheme: SECRETS
           SecretArn: !GetAtt AuroraCluster.MasterUserSecret.SecretArn
+        - AuthScheme: IAM
       RoleArn: !GetAtt DBProxyRole.Arn
       VpcSubnetIds: !Split
         - ','
