@@ -487,6 +487,88 @@ Resources:
       DBClusterIdentifiers:
         - !Ref AuroraCluster
 
+  # ==========================================
+  # ElastiCache Serverless Redis
+  # ==========================================
+  
+  # ElastiCache Subnet Group for Redis
+  RedisSubnetGroup:
+    Type: AWS::ElastiCache::SubnetGroup
+    Properties:
+      Description: Subnet group for ElastiCache Serverless Redis
+      SubnetIds: !Split
+        - ','
+        - !ImportValue
+          'Fn::Sub': '${EnvironmentName}-PrivateDBSubnets'
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-redis-subnet-group
+        - Key: Type
+          Value: !Ref ClusterType
+        - Key: Environment
+          Value: !Ref ClusterEnvironment
+        - Key: ManagedBy
+          Value: CloudFormation
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  # ElastiCache Serverless Redis Cache
+  RedisServerlessCache:
+    Type: AWS::ElastiCache::ServerlessCache
+    DependsOn:
+      - RedisSubnetGroup
+      - AuroraSecurityGroup
+    Properties:
+      ServerlessCacheName: !Sub ${EnvironmentName}-redis-cache
+      Engine: redis
+      Description: Serverless Redis cache for application data
+      MajorEngineVersion: 7
+      SubnetIds: !Split
+        - ','
+        - !ImportValue
+          'Fn::Sub': '${EnvironmentName}-PrivateDBSubnets'
+      SecurityGroupIds:
+        - !Ref AuroraSecurityGroup
+      DailySnapshotTime: "03:30"
+      SnapshotRetentionLimit: 7
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-redis-cache
+        - Key: Type
+          Value: !Ref ClusterType
+        - Key: Environment
+          Value: !Ref ClusterEnvironment
+        - Key: ManagedBy
+          Value: CloudFormation
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
 Outputs:
   # Database Outputs
   AuroraClusterEndpoint:
@@ -530,6 +612,25 @@ Outputs:
     Value: !Ref DBSubnetGroup
     Export:
       Name: !Sub ${EnvironmentName}-DBSubnetGroup
+
+  # Redis Outputs
+  RedisEndpoint:
+    Description: ElastiCache Serverless Redis endpoint
+    Value: !GetAtt RedisServerlessCache.Endpoint.Address
+    Export:
+      Name: !Sub ${EnvironmentName}-RedisEndpoint
+
+  RedisPort:
+    Description: ElastiCache Serverless Redis port
+    Value: !GetAtt RedisServerlessCache.Endpoint.Port
+    Export:
+      Name: !Sub ${EnvironmentName}-RedisPort
+
+  RedisSubnetGroup:
+    Description: Redis Subnet Group name
+    Value: !Ref RedisSubnetGroup
+    Export:
+      Name: !Sub ${EnvironmentName}-RedisSubnetGroup
 
   # Template metadata
   TemplateVersion:

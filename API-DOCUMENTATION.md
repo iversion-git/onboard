@@ -417,7 +417,8 @@ Error responses:
   "type": "dedicated",                            // ✅ Required - "dedicated" or "shared"
   "environment": "Production",                    // ✅ Required - "Production", "Staging", or "Dev"
   "region": "us-east-1",                          // ✅ Required - AWS region
-  "cidr": "10.0.0.0/16"                          // ✅ Required - CIDR block (validated for uniqueness)
+  "cidr": "10.0.0.0/16",                         // ✅ Required - CIDR block (validated for uniqueness)
+  "code_bucket": "my-lambda-code-bucket"          // ✅ Required - S3 bucket for Lambda function code
 }
 ```
 
@@ -432,7 +433,8 @@ Error responses:
     "environment": "Production",
     "region": "us-east-1",
     "cidr": "10.0.0.0/16",
-    "status": "Active",
+    "code_bucket": "my-lambda-code-bucket",
+    "status": "In-Active",
     "deployment_status": null,
     "created_at": "2025-12-26T05:00:00.000Z"
   },

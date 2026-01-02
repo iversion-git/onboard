@@ -45,6 +45,7 @@ export interface ClusterRecord {
   environment: 'Production' | 'Staging' | 'Dev';  // New field for environment type
   region: string;             // AWS region
   cidr: string;               // Network CIDR block
+  code_bucket: string;        // S3 bucket for Lambda function code
   status: 'In-Active' | 'Deploying' | 'Active' | 'Failed';
   deployment_status?: string; // CloudFormation stack status
   deployment_id?: string;     // CloudFormation stack ARN
@@ -116,6 +117,7 @@ export const ClusterRecordSchema = z.object({
   cidr: z.string().refine(validateCIDR, {
     message: 'CIDR must be a valid private IPv4 CIDR block (RFC 1918)'
   }),
+  code_bucket: z.string().min(1).max(255),
   status: z.enum(['In-Active', 'Deploying', 'Active', 'Failed']),
   deployment_status: z.string().optional(),
   deployment_id: z.string().optional(),
@@ -165,6 +167,7 @@ export const CreateClusterSchema = z.object({
   cidr: z.string().refine(validateCIDR, {
     message: 'CIDR must be a valid private IPv4 CIDR block (RFC 1918)'
   }),
+  code_bucket: z.string().min(1).max(255),
 });
 
 export const UpdateClusterSchema = z.object({
