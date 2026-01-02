@@ -28,6 +28,7 @@ Parameters:
   CodeBucketName:
     Type: String
     Description: S3 bucket name containing lambda-api.zip (from cluster code_bucket field)
+    Default: manual-api-code-bucket
     MinLength: 1
     ConstraintDescription: Must specify the code bucket name
 
@@ -35,6 +36,13 @@ Parameters:
     Type: String
     Default: prod-sqs
     Description: SQS queue name for Laravel job processing
+
+  # Bref Layer Configuration
+  BrefLayerArn:
+    Type: String
+    Description: Bref PHP layer ARN for the deployment region
+    MinLength: 1
+    ConstraintDescription: Must specify the Bref PHP layer ARN
 
   ProjectName:
     Type: String
@@ -99,10 +107,8 @@ Globals:
         - !ImportValue
           'Fn::Sub': '${EnvironmentName}-PrivateAppSubnets'
     Layers:
-      # Bref PHP 8.2 + common extensions + Laravel bridge
-      - !Sub "arn:aws:lambda:${AWS::Region}:534081306603:layer:bref-php-82:1"
-      - !Sub "arn:aws:lambda:${AWS::Region}:534081306603:layer:bref-extra-php-82:1"
-      - !Sub "arn:aws:lambda:${AWS::Region}:534081306603:layer:bref-laravel-bridge:1"
+      # Single Bref PHP layer for API-only application
+      - !Ref BrefLayerArn
     Environment:
       Variables:
         # --- Derived from deployment ---
@@ -116,15 +122,12 @@ Globals:
         SQS_QUEUE_URL: !Ref AppQueue
         # Compat / app usage
         PRIVATE_BUCKET: !Ref PrivateDataBucket
-        # From DB stack output (Redis endpoint)
-        REDIS_HOST: !ImportValue
-          'Fn::Sub': '${EnvironmentName}-RedisEndpoint'
-        # Database connection (RDS Proxy endpoint)
-        DB_HOST: !ImportValue
-          'Fn::Sub': '${EnvironmentName}-DBProxyEndpoint'
+        # From hardcoded values for testing (Redis endpoint)
+        REDIS_HOST: mycluster-12-redis-cache-gm1fmx.serverless.apse2.cache.amazonaws.com
+        # Database connection (hardcoded for testing - will be replaced with RDS Proxy later)
+        DB_HOST: localhost
         DB_PORT: "3306"
-        DB_DATABASE: !ImportValue
-          'Fn::Sub': '${EnvironmentName}-DatabaseName'
+        DB_DATABASE: appdb
         # Fixed Laravel settings
         CACHE_DRIVER: redis
         JWT_SECRET: "mE8q2wXv7Kp1Zt9Rj4Nf0aHs6Ld3cYuB"
@@ -367,6 +370,40 @@ Resources:
         Input: |
           {"type":"artisan","command":"schedule:run"}
 
+  # -----------------------
+  # Artisan Lambda (Laravel CLI commands)
+  # Code is ALWAYS s3://<CodeBucketName>/lambda-api.zip
+  # -----------------------
+  ArtisanFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${AppName}-artisan-${Stage}"
+      Handler: artisan
+      CodeUri:
+        Bucket: !Ref CodeBucketName
+        Key: lambda-api.zip
+      Timeout: 120
+      # No events - this function is invoked manually or via other services
+      Policies:
+        - Statement:
+            # Artisan may need to read/write application data
+            - Effect: Allow
+              Action: s3:ListBucket
+              Resource: !GetAtt PrivateDataBucket.Arn
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+                - s3:DeleteObject
+              Resource: !Sub "${PrivateDataBucket.Arn}/*"
+            # Artisan may need to interact with SQS for queue management
+            - Effect: Allow
+              Action:
+                - sqs:SendMessage
+                - sqs:GetQueueAttributes
+                - sqs:PurgeQueue
+              Resource: !GetAtt AppQueue.Arn
+
 Outputs:
   # API Gateway Outputs
   ApiUrl:
@@ -387,6 +424,12 @@ Outputs:
     Value: !Ref WorkerFunction
     Export:
       Name: !Sub ${EnvironmentName}-WorkerFunctionName
+
+  ArtisanFunctionName:
+    Description: Lambda function name (artisan)
+    Value: !Ref ArtisanFunction
+    Export:
+      Name: !Sub ${EnvironmentName}-ArtisanFunctionName
 
   # SQS Outputs
   QueueUrl:

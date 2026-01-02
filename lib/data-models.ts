@@ -46,6 +46,7 @@ export interface ClusterRecord {
   region: string;             // AWS region
   cidr: string;               // Network CIDR block
   code_bucket: string;        // S3 bucket for Lambda function code
+  bref_layer_arn: string;     // Bref PHP layer ARN for the region
   status: 'In-Active' | 'Deploying' | 'Active' | 'Failed';
   deployment_status?: string; // CloudFormation stack status
   deployment_id?: string;     // CloudFormation stack ARN
@@ -118,6 +119,7 @@ export const ClusterRecordSchema = z.object({
     message: 'CIDR must be a valid private IPv4 CIDR block (RFC 1918)'
   }),
   code_bucket: z.string().min(1).max(255),
+  bref_layer_arn: z.string().min(1),
   status: z.enum(['In-Active', 'Deploying', 'Active', 'Failed']),
   deployment_status: z.string().optional(),
   deployment_id: z.string().optional(),
@@ -168,6 +170,7 @@ export const CreateClusterSchema = z.object({
     message: 'CIDR must be a valid private IPv4 CIDR block (RFC 1918)'
   }),
   code_bucket: z.string().min(1).max(255),
+  bref_layer_arn: z.string().min(1),
 });
 
 export const UpdateClusterSchema = z.object({

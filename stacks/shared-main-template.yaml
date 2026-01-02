@@ -1,4 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
 Description: >
   Main shared cluster template that orchestrates infrastructure and database deployment
   using nested CloudFormation stacks. This keeps individual templates small
@@ -28,16 +29,6 @@ Metadata:
           - PrivateDBSubnet1CIDR
           - PrivateDBSubnet2CIDR
           - PrivateDBSubnet3CIDR
-      - Label:
-          default: "Database Configuration"
-        Parameters:
-          - DatabaseName
-          - MinCapacity
-          - MaxCapacity
-          - BackupRetentionPeriod
-          - PreferredBackupWindow
-          - PreferredMaintenanceWindow
-          - DeletionProtection
       - Label:
           default: "Template Configuration"
         Parameters:
@@ -124,62 +115,6 @@ Parameters:
     AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
     ConstraintDescription: Must be a valid CIDR block in the format x.x.x.x/x
 
-  DatabaseName:
-    Type: String
-    Description: Default database name to create
-    Default: appdb
-    MinLength: 1
-    MaxLength: 64
-    AllowedPattern: ^[a-zA-Z][a-zA-Z0-9_]*$
-    ConstraintDescription: Must begin with a letter and contain only alphanumeric characters and underscores
-
-  MinCapacity:
-    Type: Number
-    Description: Minimum Aurora Capacity Units (ACU) for serverless v2
-    Default: 0.5
-    MinValue: 0.5
-    MaxValue: 128
-    ConstraintDescription: Must be between 0.5 and 128
-
-  MaxCapacity:
-    Type: Number
-    Description: Maximum Aurora Capacity Units (ACU) for serverless v2
-    Default: 128
-    MinValue: 0.5
-    MaxValue: 128
-    ConstraintDescription: Must be between 0.5 and 128
-
-  BackupRetentionPeriod:
-    Type: Number
-    Description: Number of days to retain automated backups
-    Default: 7
-    MinValue: 1
-    MaxValue: 35
-    ConstraintDescription: Must be between 1 and 35 days
-
-  PreferredBackupWindow:
-    Type: String
-    Description: Preferred backup window (UTC time)
-    Default: "03:00-04:00"
-    AllowedPattern: ^([0-1][0-9]|2[0-3]):[0-5][0-9]-([0-1][0-9]|2[0-3]):[0-5][0-9]$
-    ConstraintDescription: Must be in format HH:MM-HH:MM (UTC)
-
-  PreferredMaintenanceWindow:
-    Type: String
-    Description: Preferred maintenance window
-    Default: "sun:04:00-sun:05:00"
-    AllowedPattern: ^(sun|mon|tue|wed|thu|fri|sat):[0-2][0-9]:[0-5][0-9]-(sun|mon|tue|wed|thu|fri|sat):[0-2][0-9]:[0-5][0-9]$
-    ConstraintDescription: Must be in format ddd:HH:MM-ddd:HH:MM
-
-  DeletionProtection:
-    Type: String
-    Description: Enable deletion protection for Aurora cluster
-    Default: "false"
-    AllowedValues:
-      - "true"
-      - "false"
-    ConstraintDescription: Must be true or false
-
   TemplateS3Bucket:
     Type: String
     Description: S3 bucket containing the nested CloudFormation templates
@@ -213,7 +148,7 @@ Parameters:
   CodeBucketName:
     Type: String
     Description: S3 bucket name containing lambda-api.zip (from cluster code_bucket field)
-    Default: manual-api-code-bucketstatic
+    Default: manual-api-code-bucket
     MinLength: 1
     ConstraintDescription: Must specify the code bucket name
 
@@ -231,6 +166,13 @@ Parameters:
     Type: String
     Default: prod-sqs
     Description: SQS queue name for Laravel job processing
+
+  # Bref Layer Configuration
+  BrefLayerArn:
+    Type: String
+    Description: Bref PHP layer ARN for the deployment region
+    MinLength: 1
+    ConstraintDescription: Must specify the Bref PHP layer ARN
 
   # Cluster-specific parameters for tagging
   ClusterName:
@@ -323,65 +265,12 @@ Resources:
           - !Ref AWS::NoValue
 
   # ==========================================
-  # Database Nested Stack
-  # ==========================================
-  
-  DatabaseStack:
-    Type: AWS::CloudFormation::Stack
-    DependsOn: InfrastructureStack
-    Properties:
-      TemplateURL: !Sub
-        - 'https://${TemplateS3Bucket}.s3.${AWS::Region}.amazonaws.com/${Prefix}shared-database-template.yaml'
-        - Prefix: !If [HasTemplatePrefix, !Sub '${TemplateS3KeyPrefix}/', '']
-      Parameters:
-        EnvironmentName: !Ref EnvironmentName
-        DatabaseName: !Ref DatabaseName
-        MinCapacity: !Ref MinCapacity
-        MaxCapacity: !Ref MaxCapacity
-        BackupRetentionPeriod: !Ref BackupRetentionPeriod
-        PreferredBackupWindow: !Ref PreferredBackupWindow
-        PreferredMaintenanceWindow: !Ref PreferredMaintenanceWindow
-        DeletionProtection: !Ref DeletionProtection
-        ProjectName: !Ref ProjectName
-        CostCenter: !Ref CostCenter
-        Owner: !Ref Owner
-        ClusterName: !Ref ClusterName
-        ClusterType: !Ref ClusterType
-        ClusterEnvironment: !Ref ClusterEnvironment
-      Tags:
-        - Key: Name
-          Value: !Sub ${ClusterName}-Database
-        - Key: Type
-          Value: !Ref ClusterType
-        - Key: Environment
-          Value: !Ref ClusterEnvironment
-        - Key: StackType
-          Value: Database
-        - Key: ManagedBy
-          Value: CloudFormation
-        - !If
-          - HasProjectName
-          - Key: Project
-            Value: !Ref ProjectName
-          - !Ref AWS::NoValue
-        - !If
-          - HasCostCenter
-          - Key: CostCenter
-            Value: !Ref CostCenter
-          - !Ref AWS::NoValue
-        - !If
-          - HasOwner
-          - Key: Owner
-            Value: !Ref Owner
-          - !Ref AWS::NoValue
-
-  # ==========================================
   # Application Nested Stack
   # ==========================================
   
   ApplicationStack:
     Type: AWS::CloudFormation::Stack
-    DependsOn: DatabaseStack
+    DependsOn: InfrastructureStack
     Properties:
       TemplateURL: !Sub
         - 'https://${TemplateS3Bucket}.s3.${AWS::Region}.amazonaws.com/${Prefix}shared-app-template.yaml'
@@ -392,6 +281,7 @@ Resources:
         AppName: !Ref AppName
         Stage: !Ref Stage
         QueueName: !Ref QueueName
+        BrefLayerArn: !Ref BrefLayerArn
         ProjectName: !Ref ProjectName
         CostCenter: !Ref CostCenter
         Owner: !Ref Owner
@@ -435,10 +325,6 @@ Outputs:
     Description: Infrastructure nested stack ID
     Value: !Ref InfrastructureStack
 
-  DatabaseStackId:
-    Description: Database nested stack ID
-    Value: !Ref DatabaseStack
-
   ApplicationStackId:
     Description: Application nested stack ID
     Value: !Ref ApplicationStack
@@ -472,40 +358,6 @@ Outputs:
     Description: NAT Gateway ID for Lambda internet access
     Value: !GetAtt InfrastructureStack.Outputs.NATGateway
 
-  # Database Outputs (passed through from nested stack)
-  AuroraClusterEndpoint:
-    Description: Aurora MySQL cluster endpoint
-    Value: !GetAtt DatabaseStack.Outputs.AuroraClusterEndpoint
-
-  AuroraClusterReadEndpoint:
-    Description: Aurora MySQL cluster read endpoint
-    Value: !GetAtt DatabaseStack.Outputs.AuroraClusterReadEndpoint
-
-  AuroraClusterPort:
-    Description: Aurora MySQL cluster port
-    Value: !GetAtt DatabaseStack.Outputs.AuroraClusterPort
-
-  DBProxyEndpoint:
-    Description: RDS Proxy endpoint for connection pooling
-    Value: !GetAtt DatabaseStack.Outputs.DBProxyEndpoint
-
-  DBSecretArn:
-    Description: ARN of the database password secret (AWS managed)
-    Value: !GetAtt DatabaseStack.Outputs.DBSecretArn
-
-  DatabaseName:
-    Description: Default database name
-    Value: !GetAtt DatabaseStack.Outputs.DatabaseName
-
-  # Redis Outputs (passed through from database stack)
-  RedisEndpoint:
-    Description: ElastiCache Serverless Redis endpoint
-    Value: !GetAtt DatabaseStack.Outputs.RedisEndpoint
-
-  RedisPort:
-    Description: ElastiCache Serverless Redis port
-    Value: !GetAtt DatabaseStack.Outputs.RedisPort
-
   # Application Outputs (passed through from nested stack)
   ApiUrl:
     Description: HTTP API endpoint
@@ -518,6 +370,10 @@ Outputs:
   WorkerFunctionName:
     Description: Lambda function name (worker)
     Value: !GetAtt ApplicationStack.Outputs.WorkerFunctionName
+
+  ArtisanFunctionName:
+    Description: Lambda function name (artisan)
+    Value: !GetAtt ApplicationStack.Outputs.ArtisanFunctionName
 
   QueueUrl:
     Description: SQS queue URL
@@ -534,4 +390,4 @@ Outputs:
 
   DeploymentArchitecture:
     Description: Deployment architecture used
-    Value: "Nested Stacks (Infrastructure + Database + Application)"
+    Value: "Nested Stacks (Infrastructure + Application)"

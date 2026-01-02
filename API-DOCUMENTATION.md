@@ -418,7 +418,8 @@ Error responses:
   "environment": "Production",                    // ✅ Required - "Production", "Staging", or "Dev"
   "region": "us-east-1",                          // ✅ Required - AWS region
   "cidr": "10.0.0.0/16",                         // ✅ Required - CIDR block (validated for uniqueness)
-  "code_bucket": "my-lambda-code-bucket"          // ✅ Required - S3 bucket for Lambda function code
+  "code_bucket": "my-lambda-code-bucket",         // ✅ Required - S3 bucket for Lambda function code
+  "bref_layer_arn": "arn:aws:lambda:us-east-1:534081306603:layer:php-82:60"  // ✅ Required - Bref PHP layer ARN for the region
 }
 ```
 
@@ -434,6 +435,7 @@ Error responses:
     "region": "us-east-1",
     "cidr": "10.0.0.0/16",
     "code_bucket": "my-lambda-code-bucket",
+    "bref_layer_arn": "arn:aws:lambda:us-east-1:534081306603:layer:php-82:60",
     "status": "In-Active",
     "deployment_status": null,
     "created_at": "2025-12-26T05:00:00.000Z"
