@@ -98,14 +98,15 @@ Globals:
     Architectures: [x86_64]
     MemorySize: 1024
     Timeout: 30
-    VpcConfig:
-      SecurityGroupIds:
-        - !ImportValue
-          'Fn::Sub': '${EnvironmentName}-LambdaSecurityGroup'
-      SubnetIds: !Split
-        - ','
-        - !ImportValue
-          'Fn::Sub': '${EnvironmentName}-PrivateAppSubnets'
+    # VpcConfig temporarily removed for faster testing
+    # VpcConfig:
+    #   SecurityGroupIds:
+    #     - !ImportValue
+    #       'Fn::Sub': '${EnvironmentName}-LambdaSecurityGroup'
+    #   SubnetIds: !Split
+    #     - ','
+    #     - !ImportValue
+    #       'Fn::Sub': '${EnvironmentName}-PrivateAppSubnets'
     Layers:
       # Single Bref PHP layer for API-only application
       - !Ref BrefLayerArn
@@ -144,13 +145,160 @@ Globals:
       ManagedBy: CloudFormation
 
 Resources:
+  # ==========================================
+  # Regional WAF for API Gateway Protection
+  # ==========================================
+  
+  ApiGatewayWAF:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: !Sub ${EnvironmentName}-api-gateway-waf
+      Description: Regional WAF to protect API Gateway - Block all except CloudFront with custom header
+      Scope: REGIONAL
+      DefaultAction:
+        Block: {}  # Block all by default
+      Rules:
+        # Allow only CloudFront with custom header (highest priority)
+        - Name: AllowCloudFrontOnly
+          Priority: 1
+          Action:
+            Allow: {}
+          Statement:
+            ByteMatchStatement:
+              SearchString: cf-secret-header-xyz789abc123
+              FieldToMatch:
+                SingleHeader:
+                  Name: x-cloudfront-secret
+              TextTransformations:
+                - Priority: 0
+                  Type: NONE
+              PositionalConstraint: EXACTLY
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: AllowCloudFrontOnlyMetric
+        
+        # AWS Managed Rule - Core Rule Set (OWASP Top 10) - only applies to allowed traffic
+        - Name: AWSManagedRulesCommonRuleSet
+          Priority: 2
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesCommonRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: CommonRuleSetMetric
+        
+        # AWS Managed Rule - Known Bad Inputs
+        - Name: AWSManagedRulesKnownBadInputsRuleSet
+          Priority: 3
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesKnownBadInputsRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: KnownBadInputsMetric
+        
+        # AWS Managed Rule - PHP Application Protection
+        - Name: AWSManagedRulesPHPRuleSet
+          Priority: 4
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesPHPRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: PHPRuleSetMetric
+        
+        # AWS Managed Rule - IP Reputation
+        - Name: AWSManagedRulesAmazonIpReputationList
+          Priority: 5
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesAmazonIpReputationList
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: IpReputationMetric
+        
+        # Rate limiting for API endpoints
+        - Name: ApiRateLimitRule
+          Priority: 6
+          Action:
+            Block: {}
+          Statement:
+            RateBasedStatement:
+              Limit: 2000  # 2000 requests per 5 minutes per IP
+              AggregateKeyType: IP
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: ApiRateLimitMetric
+      
+      VisibilityConfig:
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: !Sub ${EnvironmentName}-api-gateway-waf
+      
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-api-gateway-waf
+        - Key: Type
+          Value: !Ref ClusterType
+        - Key: Environment
+          Value: !Ref ClusterEnvironment
+        - Key: Purpose
+          Value: API Gateway Protection
+        - Key: ManagedBy
+          Value: CloudFormation
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  # WAF Association with REST API Gateway
+  ApiGatewayWAFAssociation:
+    Type: AWS::WAFv2::WebACLAssociation
+    DependsOn:
+      - ApiGatewayWAF
+      - ApiDeployment
+    Properties:
+      ResourceArn: !Sub "arn:aws:apigateway:${AWS::Region}::/restapis/${RestApi}/stages/${Stage}"
+      WebACLArn: !GetAtt ApiGatewayWAF.Arn
+
   # -----------------------
   # Private S3 bucket for tenant data (per-tenant "folders" are key prefixes)
   # -----------------------
   PrivateDataBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub "${AppName}-private-${AWS::AccountId}-${AWS::Region}-${Stage}"
+      # Generate unique bucket name using stack ID or timestamp
+      # BucketName: !Sub "${AppName}-private-${AWS::AccountId}-${AWS::Region}-${Stage}-${EnvironmentName}"
+      # Let CloudFormation auto-generate unique name
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         IgnorePublicAcls: true
@@ -190,7 +338,8 @@ Resources:
   AppQueue:
     Type: AWS::SQS::Queue
     Properties:
-      QueueName: !Ref QueueName
+      # Let CloudFormation auto-generate unique queue name
+      # QueueName: !Sub "${QueueName}-${EnvironmentName}"
       VisibilityTimeout: 120
       Tags:
         - Key: Name
@@ -218,18 +367,88 @@ Resources:
           - !Ref AWS::NoValue
 
   # -----------------------
-  # HTTP API Gateway (HTTP API)
+  # REST API Gateway (required for WAF integration)
   # -----------------------
-  HttpApi:
-    Type: AWS::Serverless::HttpApi
+  RestApi:
+    Type: AWS::ApiGateway::RestApi
     Properties:
-      Name: !Sub "${AppName}-http-api-${Stage}"
-      StageName: !Ref Stage
+      Name: !Sub "${AppName}-rest-api-${Stage}"
+      Description: REST API Gateway for Laravel application with WAF protection
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+      Policy:
+        Statement:
+          - Effect: Allow
+            Principal: "*"
+            Action: execute-api:Invoke
+            Resource: "*"
       Tags:
-        Name: !Sub ${ClusterName}-HttpApi
-        Type: !Ref ClusterType
-        Environment: !Ref ClusterEnvironment
-        ManagedBy: CloudFormation
+        - Key: Name
+          Value: !Sub ${ClusterName}-RestApi
+        - Key: Type
+          Value: !Ref ClusterType
+        - Key: Environment
+          Value: !Ref ClusterEnvironment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # API Gateway Resource for proxy
+  ApiProxyResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RestApi
+      ParentId: !GetAtt RestApi.RootResourceId
+      PathPart: "{proxy+}"
+
+  # API Gateway Method for proxy
+  ApiProxyMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref ApiProxyResource
+      HttpMethod: ANY
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WebFunction.Arn}/invocations"
+
+  # API Gateway Method for root
+  ApiRootMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !GetAtt RestApi.RootResourceId
+      HttpMethod: ANY
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WebFunction.Arn}/invocations"
+
+  # API Gateway Deployment
+  ApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - ApiProxyMethod
+      - ApiRootMethod
+    Properties:
+      RestApiId: !Ref RestApi
+      StageName: !Ref Stage
+      StageDescription:
+        Description: !Sub "${Stage} stage for ${AppName} API"
+        Variables:
+          Environment: !Ref ClusterEnvironment
+
+  # Lambda permission for API Gateway
+  ApiGatewayLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref WebFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/*/*"
 
   # -----------------------
   # Web Lambda (Laravel HTTP)
@@ -243,13 +462,7 @@ Resources:
       CodeUri:
         Bucket: !Ref CodeBucketName
         Key: lambda-api.zip
-      Events:
-        HttpApiEvent:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref HttpApi
-            Path: /{proxy+}
-            Method: ANY
+      # No events - API Gateway will invoke directly
       Policies:
         - Statement:
             # App can enqueue jobs
@@ -316,7 +529,8 @@ Resources:
   SchedulerToSqsRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub "${AppName}-scheduler-to-sqs-${Stage}"
+      # Let CloudFormation auto-generate unique role name
+      # RoleName: !Sub "${AppName}-scheduler-to-sqs-${Stage}"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -360,7 +574,8 @@ Resources:
   EnqueueSchedule:
     Type: AWS::Scheduler::Schedule
     Properties:
-      Name: !Sub "${AppName}-enqueue-schedule-${Stage}"
+      # Let CloudFormation auto-generate unique schedule name
+      # Name: !Sub "${AppName}-enqueue-schedule-${Stage}"
       FlexibleTimeWindow:
         Mode: "OFF"
       ScheduleExpression: "rate(5 minutes)"
@@ -407,14 +622,14 @@ Resources:
 Outputs:
   # API Gateway Outputs
   ApiUrl:
-    Description: HTTP API endpoint
-    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/"
+    Description: REST API endpoint
+    Value: !Sub "https://${RestApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/"
     Export:
       Name: !Sub ${EnvironmentName}-ApiUrl
 
   ApiGatewayDomainName:
     Description: API Gateway domain name (for CloudFront origin)
-    Value: !Sub "${HttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+    Value: !Sub "${RestApi}.execute-api.${AWS::Region}.amazonaws.com"
     Export:
       Name: !Sub ${EnvironmentName}-ApiGatewayDomainName
 
@@ -470,6 +685,19 @@ Outputs:
     Value: !Sub "https://sqs.${AWS::Region}.amazonaws.com/${AWS::AccountId}"
     Export:
       Name: !Sub ${EnvironmentName}-SqsPrefix
+
+  # WAF Outputs
+  ApiGatewayWAFId:
+    Description: Regional WAF Web ACL ID for API Gateway
+    Value: !Ref ApiGatewayWAF
+    Export:
+      Name: !Sub ${EnvironmentName}-ApiGatewayWAFId
+
+  ApiGatewayWAFArn:
+    Description: Regional WAF Web ACL ARN for API Gateway
+    Value: !GetAtt ApiGatewayWAF.Arn
+    Export:
+      Name: !Sub ${EnvironmentName}-ApiGatewayWAFArn
 
   # Template metadata
   TemplateVersion:

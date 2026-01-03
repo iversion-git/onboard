@@ -226,65 +226,12 @@ Conditions:
 
 Resources:
   # ==========================================
-  # Infrastructure Nested Stack
-  # ==========================================
-  
-  InfrastructureStack:
-    Type: AWS::CloudFormation::Stack
-    Properties:
-      TemplateURL: !Sub
-        - 'https://${TemplateS3Bucket}.s3.${AWS::Region}.amazonaws.com/${Prefix}shared-infrastructure-template.yaml'
-        - Prefix: !If [HasTemplatePrefix, !Sub '${TemplateS3KeyPrefix}/', '']
-      Parameters:
-        EnvironmentName: !Ref EnvironmentName
-        VpcCIDR: !Ref VpcCIDR
-        AvailabilityZoneCount: !Ref AvailabilityZoneCount
-        PrivateAppSubnet1CIDR: !Ref PrivateAppSubnet1CIDR
-        PrivateAppSubnet2CIDR: !Ref PrivateAppSubnet2CIDR
-        PrivateAppSubnet3CIDR: !Ref PrivateAppSubnet3CIDR
-        PrivateDBSubnet1CIDR: !Ref PrivateDBSubnet1CIDR
-        PrivateDBSubnet2CIDR: !Ref PrivateDBSubnet2CIDR
-        PrivateDBSubnet3CIDR: !Ref PrivateDBSubnet3CIDR
-        ProjectName: !Ref ProjectName
-        CostCenter: !Ref CostCenter
-        Owner: !Ref Owner
-        ClusterName: !Ref ClusterName
-        ClusterType: !Ref ClusterType
-        ClusterEnvironment: !Ref ClusterEnvironment
-      Tags:
-        - Key: Name
-          Value: !Sub ${ClusterName}-Infrastructure
-        - Key: Type
-          Value: !Ref ClusterType
-        - Key: Environment
-          Value: !Ref ClusterEnvironment
-        - Key: StackType
-          Value: Infrastructure
-        - Key: ManagedBy
-          Value: CloudFormation
-        - !If
-          - HasProjectName
-          - Key: Project
-            Value: !Ref ProjectName
-          - !Ref AWS::NoValue
-        - !If
-          - HasCostCenter
-          - Key: CostCenter
-            Value: !Ref CostCenter
-          - !Ref AWS::NoValue
-        - !If
-          - HasOwner
-          - Key: Owner
-            Value: !Ref Owner
-          - !Ref AWS::NoValue
-
-  # ==========================================
-  # Application Nested Stack
+  # Application Nested Stack (temporarily without infrastructure dependency)
   # ==========================================
   
   ApplicationStack:
     Type: AWS::CloudFormation::Stack
-    DependsOn: InfrastructureStack
+    # DependsOn: InfrastructureStack  # Temporarily removed for testing
     Properties:
       TemplateURL: !Sub
         - 'https://${TemplateS3Bucket}.s3.${AWS::Region}.amazonaws.com/${Prefix}shared-app-template.yaml'
@@ -343,6 +290,7 @@ Resources:
       Parameters:
         EnvironmentName: !Ref EnvironmentName
         ApiGatewayDomainName: !GetAtt ApplicationStack.Outputs.ApiGatewayDomainName
+        Stage: !Ref Stage
         CustomDomainName: !Ref CustomDomainName
         CertificateArn: !Ref CertificateArn
         ProjectName: !Ref ProjectName
@@ -384,9 +332,9 @@ Outputs:
     Description: Main cluster stack ID
     Value: !Ref AWS::StackId
 
-  InfrastructureStackId:
-    Description: Infrastructure nested stack ID
-    Value: !Ref InfrastructureStack
+  # InfrastructureStackId:  # Temporarily disabled
+  #   Description: Infrastructure nested stack ID
+  #   Value: !Ref InfrastructureStack
 
   ApplicationStackId:
     Description: Application nested stack ID
@@ -396,34 +344,10 @@ Outputs:
     Description: Edge nested stack ID
     Value: !Ref EdgeStack
 
-  # Infrastructure Outputs (passed through from nested stack)
-  VPC:
-    Description: VPC ID
-    Value: !GetAtt InfrastructureStack.Outputs.VPC
-
-  VPCCidr:
-    Description: VPC CIDR block
-    Value: !GetAtt InfrastructureStack.Outputs.VPCCidr
-
-  PrivateAppSubnets:
-    Description: Comma-delimited list of Private App Subnet IDs
-    Value: !GetAtt InfrastructureStack.Outputs.PrivateAppSubnets
-
-  PrivateDBSubnets:
-    Description: Comma-delimited list of Private DB Subnet IDs
-    Value: !GetAtt InfrastructureStack.Outputs.PrivateDBSubnets
-
-  LambdaSecurityGroup:
-    Description: Lambda Security Group ID for Private App Zone
-    Value: !GetAtt InfrastructureStack.Outputs.LambdaSecurityGroup
-
-  DBSecurityGroup:
-    Description: DB Security Group ID for Private DB Zone
-    Value: !GetAtt InfrastructureStack.Outputs.DBSecurityGroup
-
-  NATGateway:
-    Description: NAT Gateway ID for Lambda internet access
-    Value: !GetAtt InfrastructureStack.Outputs.NATGateway
+  # Infrastructure Outputs (temporarily disabled)
+  # VPC:
+  #   Description: VPC ID
+  #   Value: !GetAtt InfrastructureStack.Outputs.VPC
 
   # Application Outputs (passed through from nested stack)
   ApiUrl:
@@ -450,6 +374,10 @@ Outputs:
     Description: Private data bucket name
     Value: !GetAtt ApplicationStack.Outputs.PrivateBucketName
 
+  ApiGatewayWAFArn:
+    Description: Regional WAF Web ACL ARN protecting API Gateway
+    Value: !GetAtt ApplicationStack.Outputs.ApiGatewayWAFArn
+
   # Edge Outputs (passed through from nested stack)
   CloudFrontDomainName:
     Description: CloudFront distribution domain name
@@ -469,11 +397,11 @@ Outputs:
 
   EdgeApiUrl:
     Description: API URL through CloudFront
-    Value: !GetAtt EdgeStack.Outputs.EdgeApiUrl
+    Value: !GetAtt EdgeStack.Outputs.ApiUrl
 
-  WebACLArn:
-    Description: WAF Web ACL ARN
-    Value: !GetAtt EdgeStack.Outputs.WebACLArn
+  # WebACLArn:  # Temporarily disabled
+  #   Description: WAF Web ACL ARN
+  #   Value: !GetAtt EdgeStack.Outputs.WebACLArn
 
   # Template metadata
   TemplateVersion:
