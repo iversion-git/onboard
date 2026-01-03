@@ -412,6 +412,12 @@ Outputs:
     Export:
       Name: !Sub ${EnvironmentName}-ApiUrl
 
+  ApiGatewayDomainName:
+    Description: API Gateway domain name (for CloudFront origin)
+    Value: !Sub "${HttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+    Export:
+      Name: !Sub ${EnvironmentName}-ApiGatewayDomainName
+
   # Lambda Function Outputs
   WebFunctionName:
     Description: Lambda function name (web)

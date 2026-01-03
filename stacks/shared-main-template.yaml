@@ -174,6 +174,20 @@ Parameters:
     MinLength: 1
     ConstraintDescription: Must specify the Bref PHP layer ARN
 
+  # Multi-tenant domain configuration
+  CustomDomainName:
+    Type: String
+    Description: Custom domain name for CloudFront (e.g., *.flowrix.app for multi-tenant)
+    Default: "*.flowrix.app"
+    MaxLength: 255
+
+  CertificateArn:
+    Type: String
+    Description: ACM certificate ARN for wildcard domain (*.flowrix.app)
+    Default: "arn:aws:acm:us-east-1:078607863013:certificate/d0097bd1-e417-4057-9747-24b0d81885f8"
+    MinLength: 1
+    ConstraintDescription: Must provide ACM certificate ARN for *.flowrix.app
+
   # Cluster-specific parameters for tagging
   ClusterName:
     Type: String
@@ -315,6 +329,55 @@ Resources:
             Value: !Ref Owner
           - !Ref AWS::NoValue
 
+  # ==========================================
+  # Edge Deployment Nested Stack
+  # ==========================================
+  
+  EdgeStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: ApplicationStack
+    Properties:
+      TemplateURL: !Sub
+        - 'https://${TemplateS3Bucket}.s3.${AWS::Region}.amazonaws.com/${Prefix}shared-edge-template.yaml'
+        - Prefix: !If [HasTemplatePrefix, !Sub '${TemplateS3KeyPrefix}/', '']
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        ApiGatewayDomainName: !GetAtt ApplicationStack.Outputs.ApiGatewayDomainName
+        CustomDomainName: !Ref CustomDomainName
+        CertificateArn: !Ref CertificateArn
+        ProjectName: !Ref ProjectName
+        CostCenter: !Ref CostCenter
+        Owner: !Ref Owner
+        ClusterName: !Ref ClusterName
+        ClusterType: !Ref ClusterType
+        ClusterEnvironment: !Ref ClusterEnvironment
+      Tags:
+        - Key: Name
+          Value: !Sub ${ClusterName}-Edge
+        - Key: Type
+          Value: !Ref ClusterType
+        - Key: Environment
+          Value: !Ref ClusterEnvironment
+        - Key: StackType
+          Value: Edge
+        - Key: ManagedBy
+          Value: CloudFormation
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
 Outputs:
   # Main Stack Outputs
   MainStackId:
@@ -328,6 +391,10 @@ Outputs:
   ApplicationStackId:
     Description: Application nested stack ID
     Value: !Ref ApplicationStack
+
+  EdgeStackId:
+    Description: Edge nested stack ID
+    Value: !Ref EdgeStack
 
   # Infrastructure Outputs (passed through from nested stack)
   VPC:
@@ -383,6 +450,31 @@ Outputs:
     Description: Private data bucket name
     Value: !GetAtt ApplicationStack.Outputs.PrivateBucketName
 
+  # Edge Outputs (passed through from nested stack)
+  CloudFrontDomainName:
+    Description: CloudFront distribution domain name
+    Value: !GetAtt EdgeStack.Outputs.CloudFrontDomainName
+
+  FrontendAssetsBucketName:
+    Description: S3 bucket name for frontend assets
+    Value: !GetAtt EdgeStack.Outputs.FrontendAssetsBucketName
+
+  ProductionPortalUrl:
+    Description: Production portal URL (root domain)
+    Value: !GetAtt EdgeStack.Outputs.ProductionPortalUrl
+
+  DevPortalUrl:
+    Description: Development portal URL
+    Value: !GetAtt EdgeStack.Outputs.DevPortalUrl
+
+  EdgeApiUrl:
+    Description: API URL through CloudFront
+    Value: !GetAtt EdgeStack.Outputs.EdgeApiUrl
+
+  WebACLArn:
+    Description: WAF Web ACL ARN
+    Value: !GetAtt EdgeStack.Outputs.WebACLArn
+
   # Template metadata
   TemplateVersion:
     Description: CloudFormation template version
@@ -390,4 +482,4 @@ Outputs:
 
   DeploymentArchitecture:
     Description: Deployment architecture used
-    Value: "Nested Stacks (Infrastructure + Application)"
+    Value: "Nested Stacks (Infrastructure + Application + Edge)"

@@ -43,6 +43,11 @@ const TEMPLATES = [
     s3Key: 'shared-app-template.yaml',
     description: 'Shared cluster application template (Laravel Lambda, API Gateway, SQS)'
   },
+  {
+    localPath: 'stacks/shared-edge-template.yaml',
+    s3Key: 'shared-edge-template.yaml',
+    description: 'Shared cluster edge template (CloudFront, WAF, Frontend S3)'
+  },
   // Dedicated cluster nested templates
   {
     localPath: 'stacks/dedicated-infrastructure-template.yaml',
@@ -88,6 +93,7 @@ async function uploadTemplate(s3Client, template) {
                         template.s3Key.includes('infrastructure') ? 'infrastructure' : 
                         template.s3Key.includes('database') ? 'database' :
                         template.s3Key.includes('app') ? 'application' :
+                        template.s3Key.includes('edge') ? 'edge' :
                         template.s3Key.includes('dedicated') ? 'dedicated' : 'shared',
         'template-description': template.description,
         'created-at': new Date().toISOString(),
