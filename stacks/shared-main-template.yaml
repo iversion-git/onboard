@@ -211,6 +211,14 @@ Parameters:
       - Dev
     ConstraintDescription: Must be Production, Staging, or Dev
 
+  ClusterIdShort:
+    Type: String
+    Description: Short cluster ID (first 8 characters) for resource naming
+    MinLength: 8
+    MaxLength: 8
+    AllowedPattern: ^[a-f0-9]{8}$
+    ConstraintDescription: Must be exactly 8 lowercase hexadecimal characters
+
 Conditions:
   # Condition to determine if we should use Availability Zone 3
   UseAZ3: !Equals [!Ref AvailabilityZoneCount, 3]
@@ -225,12 +233,66 @@ Conditions:
 
 Resources:
   # ==========================================
-  # Application Nested Stack (temporarily without infrastructure dependency)
+  # Infrastructure Nested Stack (VPC, subnets, security groups)
+  # ==========================================
+  
+  InfrastructureStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub
+        - 'https://${TemplateS3Bucket}.s3.${AWS::Region}.amazonaws.com/${Prefix}shared-infrastructure-template.yaml'
+        - Prefix: !If [HasTemplatePrefix, !Sub '${TemplateS3KeyPrefix}/', '']
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        VpcCIDR: !Ref VpcCIDR
+        AvailabilityZoneCount: !Ref AvailabilityZoneCount
+        PrivateAppSubnet1CIDR: !Ref PrivateAppSubnet1CIDR
+        PrivateAppSubnet2CIDR: !Ref PrivateAppSubnet2CIDR
+        PrivateAppSubnet3CIDR: !Ref PrivateAppSubnet3CIDR
+        PrivateDBSubnet1CIDR: !Ref PrivateDBSubnet1CIDR
+        PrivateDBSubnet2CIDR: !Ref PrivateDBSubnet2CIDR
+        PrivateDBSubnet3CIDR: !Ref PrivateDBSubnet3CIDR
+        ProjectName: !Ref ProjectName
+        CostCenter: !Ref CostCenter
+        Owner: !Ref Owner
+        ClusterName: !Ref ClusterName
+        ClusterType: !Ref ClusterType
+        ClusterEnvironment: !Ref ClusterEnvironment
+        ClusterIdShort: !Ref ClusterIdShort
+      Tags:
+        - Key: Name
+          Value: !Sub ${ClusterName}-Infrastructure
+        - Key: Type
+          Value: !Ref ClusterType
+        - Key: Environment
+          Value: !Ref ClusterEnvironment
+        - Key: StackType
+          Value: Infrastructure
+        - Key: ManagedBy
+          Value: CloudFormation
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  # ==========================================
+  # Application Nested Stack (depends on infrastructure)
   # ==========================================
   
   ApplicationStack:
     Type: AWS::CloudFormation::Stack
-    # DependsOn: InfrastructureStack  # Temporarily removed for testing
+    DependsOn: InfrastructureStack
     Properties:
       TemplateURL: !Sub
         - 'https://${TemplateS3Bucket}.s3.${AWS::Region}.amazonaws.com/${Prefix}shared-app-template.yaml'
@@ -250,6 +312,7 @@ Resources:
         ClusterName: !Ref ClusterName
         ClusterType: !Ref ClusterType
         ClusterEnvironment: !Ref ClusterEnvironment
+        ClusterIdShort: !Ref ClusterIdShort
       Tags:
         - Key: Name
           Value: !Sub ${ClusterName}-Application
@@ -283,9 +346,9 @@ Outputs:
     Description: Main cluster stack ID
     Value: !Ref AWS::StackId
 
-  # InfrastructureStackId:  # Temporarily disabled
-  #   Description: Infrastructure nested stack ID
-  #   Value: !Ref InfrastructureStack
+  InfrastructureStackId:
+    Description: Infrastructure nested stack ID
+    Value: !Ref InfrastructureStack
 
   ApplicationStackId:
     Description: Application nested stack ID
@@ -295,10 +358,26 @@ Outputs:
     Description: Edge stack (removed - using direct API Gateway)
     Value: "N/A"
 
-  # Infrastructure Outputs (temporarily disabled)
-  # VPC:
-  #   Description: VPC ID
-  #   Value: !GetAtt InfrastructureStack.Outputs.VPC
+  # Infrastructure Outputs (passed through from nested stack)
+  VPC:
+    Description: VPC ID
+    Value: !GetAtt InfrastructureStack.Outputs.VPC
+
+  PrivateAppSubnets:
+    Description: Private app subnet IDs
+    Value: !GetAtt InfrastructureStack.Outputs.PrivateAppSubnets
+
+  PrivateDBSubnets:
+    Description: Private database subnet IDs
+    Value: !GetAtt InfrastructureStack.Outputs.PrivateDBSubnets
+
+  LambdaSecurityGroup:
+    Description: Security group for Lambda functions
+    Value: !GetAtt InfrastructureStack.Outputs.LambdaSecurityGroup
+
+  DatabaseSecurityGroup:
+    Description: Security group for database resources
+    Value: !GetAtt InfrastructureStack.Outputs.DBSecurityGroup
 
   # Application Outputs (passed through from nested stack)
   ApiUrl:
@@ -338,4 +417,4 @@ Outputs:
 
   DeploymentArchitecture:
     Description: Deployment architecture used
-    Value: "Direct API Gateway with Custom Domain + WAF"
+    Value: "Nested Stacks (Infrastructure + Application)"

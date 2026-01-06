@@ -1,8 +1,6 @@
 // POST /clusters/{id}/deploy handler for infrastructure deployment
 import type { RouteHandler } from '../../lib/types.js';
-import type { ClusterRecord } from '../../lib/data-models.js';
-import { getDynamoDBClient, getTableNames, dynamoDBHelper } from '../../lib/dynamodb.js';
-import { GetCommand } from '@aws-sdk/lib-dynamodb';
+import { dynamoDBHelper } from '../../lib/dynamodb.js';
 import { getCloudFormationHelper } from '../../lib/cloudformation.js';
 import { getS3TemplateManager } from '../../lib/s3-templates.js';
 import { getCrossAccountRoleManager } from '../../lib/cross-account-roles.js';
@@ -65,17 +63,9 @@ export const deployHandler: RouteHandler = async (req, res) => {
 
     const { cross_account_config, parameters, tags } = validation.data;
 
-    // Get cluster record directly from DynamoDB (bypass validation for redeployment)
-    // This avoids Zod validation issues with CloudFormation outputs from previous deployments
-    const dynamoClient = getDynamoDBClient();
-    const tables = getTableNames();
-    
-    const clusterResult = await dynamoClient.send(new GetCommand({
-      TableName: tables.clusters,
-      Key: { cluster_id: clusterId }
-    }));
-    
-    if (!clusterResult.Item) {
+    // Get cluster record
+    const clusterResult = await dynamoDBHelper.getCluster(clusterId, req.correlationId);
+    if (!clusterResult.found || !clusterResult.cluster) {
       logger.warn('Cluster not found for deployment', {
         correlationId: req.correlationId,
         clusterId,
@@ -84,7 +74,7 @@ export const deployHandler: RouteHandler = async (req, res) => {
       return;
     }
 
-    const cluster = clusterResult.Item as ClusterRecord;
+    const cluster = clusterResult.cluster;
 
     // Check if cluster is in a deployable state
     if (cluster.status === 'Deploying') {
@@ -130,9 +120,11 @@ export const deployHandler: RouteHandler = async (req, res) => {
       }
 
       // Prepare CloudFormation deployment configuration
-      // Sanitize cluster name for CloudFormation stack name (no spaces, special chars)
-      const sanitizedClusterName = cluster.name.replace(/[^a-zA-Z0-9-]/g, '-').replace(/-+/g, '-');
-      const stackName = `control-plane-${sanitizedClusterName}-${clusterId.substring(0, 8)}`;
+      // Create new naming convention: {clustername}-{environment}-stack-{clusterid}
+      const sanitizedClusterName = cluster.name.replace(/[^a-zA-Z0-9-]/g, '-').replace(/-+/g, '-').toLowerCase();
+      const environment = cluster.environment.toLowerCase(); // Convert Production -> production
+      const clusterIdShort = clusterId.substring(0, 8).toLowerCase(); // Ensure lowercase
+      const stackName = `${sanitizedClusterName}-${environment}-stack-${clusterIdShort}`;
       
       // Calculate subnet CIDRs from VPC CIDR
       const subnets = calculateSubnetCIDRs(cluster.cidr);
@@ -147,8 +139,10 @@ export const deployHandler: RouteHandler = async (req, res) => {
         { ParameterKey: 'BrefLayerArn', ParameterValue: cluster.bref_layer_arn },
         { ParameterKey: 'ApiDomain', ParameterValue: cluster.api_domain },
         { ParameterKey: 'CertificateArn', ParameterValue: cluster.certificate_arn },
+        // New parameters for consistent naming
+        { ParameterKey: 'ClusterIdShort', ParameterValue: clusterIdShort },
         // Cluster-specific parameters for tagging
-        { ParameterKey: 'ClusterName', ParameterValue: cluster.name },
+        { ParameterKey: 'ClusterName', ParameterValue: sanitizedClusterName },
         { ParameterKey: 'ClusterType', ParameterValue: cluster.type === 'dedicated' ? 'Dedicated' : 'Shared' },
         { ParameterKey: 'ClusterEnvironment', ParameterValue: cluster.environment },
         // Private App subnet CIDRs (no public subnets needed)

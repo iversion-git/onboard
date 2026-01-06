@@ -8,28 +8,44 @@ import { logger } from '../../lib/logging.js';
 import { sendError } from '../../lib/response.js';
 import { z } from 'zod';
 
-// Helper function to transform CloudFormation outputs to flat structure
-function transformCloudFormationOutputs(cfOutputs: any): Record<string, any> {
+// Helper function to extract only required outputs from CloudFormation
+function extractRequiredOutputs(cfOutputs: any): Record<string, any> {
   if (!cfOutputs || typeof cfOutputs !== 'object') {
     return {};
   }
   
-  // Transform from CloudFormation format to flat format
-  // CF format: { "ApiUrl": { "Description": "...", "Value": "https://..." } }
-  // Flat format: { "ApiUrl": "https://..." }
-  const flatOutputs: Record<string, any> = {};
+  // Only extract the specific outputs we need for the application
+  const requiredOutputs: Record<string, any> = {};
   
-  for (const [key, output] of Object.entries(cfOutputs)) {
-    if (output && typeof output === 'object' && 'Value' in output) {
-      // CloudFormation output format
-      flatOutputs[key] = (output as any).Value;
-    } else {
-      // Already flat or unknown format - store as-is
-      flatOutputs[key] = output;
+  // List of outputs we actually need to store
+  const requiredKeys = [
+    'ApiUrl',
+    'ApiGatewayDomainName', 
+    'ApiGatewayRegionalDomainName',
+    'WebFunctionName',
+    'WorkerFunctionName', 
+    'ArtisanFunctionName',
+    'QueueUrl',
+    'QueueArn',
+    'DeadLetterQueueUrl',
+    'DeadLetterQueueArn',
+    'PrivateBucketName',
+    'ApiGatewayWAFArn'
+  ];
+  
+  for (const key of requiredKeys) {
+    if (cfOutputs[key]) {
+      if (typeof cfOutputs[key] === 'object' && 'Value' in cfOutputs[key]) {
+        // CloudFormation output format - extract the Value
+        requiredOutputs[key] = cfOutputs[key].Value;
+      } else {
+        // Already flat format
+        requiredOutputs[key] = cfOutputs[key];
+      }
     }
   }
   
-  return flatOutputs;
+  return requiredOutputs;
 }
 
 // Status check query parameters schema
@@ -285,13 +301,13 @@ export const statusHandler: RouteHandler = async (req, res) => {
         clusterStatus = 'Deploying';
       }
 
-      // Transform CloudFormation outputs to flat structure for storage
-      const transformedOutputs = transformCloudFormationOutputs(stackStatus.outputs);
+      // Extract only required outputs for storage
+      const requiredOutputs = extractRequiredOutputs(stackStatus.outputs);
 
       // Update cluster record if status changed
       if (clusterStatus !== cluster.status || 
           stackStatus.status !== cluster.deployment_status ||
-          (stackStatus.outputs && JSON.stringify(transformedOutputs) !== JSON.stringify(cluster.stack_outputs))) {
+          (stackStatus.outputs && JSON.stringify(requiredOutputs) !== JSON.stringify(cluster.stack_outputs))) {
         
         await dynamoClient.send(new UpdateCommand({
           TableName: tables.clusters,
@@ -308,7 +324,7 @@ export const statusHandler: RouteHandler = async (req, res) => {
           ExpressionAttributeValues: {
             ':status': clusterStatus,
             ':deployment_status': String(stackStatus.status),
-            ':stack_outputs': transformedOutputs,
+            ':stack_outputs': requiredOutputs,
             ':updated_at': new Date().toISOString(),
             ...(deployedAt && deployedAt !== cluster.deployed_at && { ':deployed_at': deployedAt })
           }
@@ -330,7 +346,7 @@ export const statusHandler: RouteHandler = async (req, res) => {
           cluster_status: clusterStatus,
           deployment_status: String(stackStatus.status),
           deployment_id: cluster.deployment_id,
-          stack_outputs: transformedOutputs,
+          stack_outputs: requiredOutputs,
           last_updated: new Date().toISOString(),
           deployed_at: deployedAt,
           ...(include_events && stackEvents.length > 0 && { 

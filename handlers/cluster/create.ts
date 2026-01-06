@@ -107,6 +107,8 @@ export const createHandler: RouteHandler = async (req, res) => {
         cidr: result.data?.cidr,
         code_bucket: result.data?.code_bucket,
         bref_layer_arn: result.data?.bref_layer_arn,
+        api_domain: result.data?.api_domain,
+        certificate_arn: result.data?.certificate_arn,
         status: result.data?.status,
         created_at: result.data?.created_at,
         updated_at: result.data?.updated_at,

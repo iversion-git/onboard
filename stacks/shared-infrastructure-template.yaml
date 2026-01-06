@@ -151,6 +151,14 @@ Parameters:
       - Dev
     ConstraintDescription: Must be Production, Staging, or Dev
 
+  ClusterIdShort:
+    Type: String
+    Description: Short cluster ID (first 8 characters) for resource naming
+    MinLength: 8
+    MaxLength: 8
+    AllowedPattern: ^[a-f0-9]{8}$
+    ConstraintDescription: Must be exactly 8 lowercase hexadecimal characters
+
 Conditions:
   # Condition to determine if we should use Availability Zone 3
   UseAZ3: !Equals [!Ref AvailabilityZoneCount, 3]
@@ -159,6 +167,10 @@ Conditions:
   HasProjectName: !Not [!Equals [!Ref ProjectName, '']]
   HasCostCenter: !Not [!Equals [!Ref CostCenter, '']]
   HasOwner: !Not [!Equals [!Ref Owner, '']]
+  
+  # Environment conditions for lowercase naming
+  IsProduction: !Equals [!Ref ClusterEnvironment, 'Production']
+  IsStaging: !Equals [!Ref ClusterEnvironment, 'Staging']
 
 Resources:
   # ==========================================
@@ -174,7 +186,15 @@ Resources:
       EnableDnsHostnames: true
       Tags:
         - Key: Name
-          Value: !Ref ClusterName
+          Value: !Sub 
+            - "${ClusterName}-${Environment}-vpc-${ClusterIdShort}"
+            - Environment: !If 
+              - IsProduction
+              - "prod"
+              - !If 
+                - IsStaging
+                - "staging"
+                - "dev"
         - Key: Type
           Value: !Ref ClusterType
         - Key: Environment
@@ -206,7 +226,15 @@ Resources:
     Properties:
       Tags:
         - Key: Name
-          Value: !Sub ${EnvironmentName}-InternetGateway
+          Value: !Sub 
+            - "${ClusterName}-${Environment}-igw-${ClusterIdShort}"
+            - Environment: !If 
+              - IsProduction
+              - "prod"
+              - !If 
+                - IsStaging
+                - "staging"
+                - "dev"
         - Key: Type
           Value: !Ref ClusterType
         - Key: Environment
@@ -356,7 +384,15 @@ Resources:
       Domain: vpc
       Tags:
         - Key: Name
-          Value: !Sub ${EnvironmentName}-NATGatewayEIP
+          Value: !Sub 
+            - "${ClusterName}-${Environment}-nat-eip-${ClusterIdShort}"
+            - Environment: !If 
+              - IsProduction
+              - "prod"
+              - !If 
+                - IsStaging
+                - "staging"
+                - "dev"
         - Key: Type
           Value: !Ref ClusterType
         - Key: Environment
@@ -372,7 +408,15 @@ Resources:
       SubnetId: !Ref PrivateAppSubnet1
       Tags:
         - Key: Name
-          Value: !Sub ${EnvironmentName}-NATGateway
+          Value: !Sub 
+            - "${ClusterName}-${Environment}-nat-gw-${ClusterIdShort}"
+            - Environment: !If 
+              - IsProduction
+              - "prod"
+              - !If 
+                - IsStaging
+                - "staging"
+                - "dev"
         - Key: Type
           Value: !Ref ClusterType
         - Key: Environment
@@ -391,7 +435,15 @@ Resources:
       VpcId: !Ref VPC
       Tags:
         - Key: Name
-          Value: !Sub ${EnvironmentName}-PrivateAppRouteTable
+          Value: !Sub 
+            - "${ClusterName}-${Environment}-app-rt-${ClusterIdShort}"
+            - Environment: !If 
+              - IsProduction
+              - "prod"
+              - !If 
+                - IsStaging
+                - "staging"
+                - "dev"
         - Key: Type
           Value: !Ref ClusterType
         - Key: Environment
@@ -416,7 +468,15 @@ Resources:
       VpcId: !Ref VPC
       Tags:
         - Key: Name
-          Value: !Sub ${EnvironmentName}-PrivateDBRouteTable
+          Value: !Sub 
+            - "${ClusterName}-${Environment}-db-rt-${ClusterIdShort}"
+            - Environment: !If 
+              - IsProduction
+              - "prod"
+              - !If 
+                - IsStaging
+                - "staging"
+                - "dev"
         - Key: Type
           Value: !Ref ClusterType
         - Key: Environment
@@ -478,7 +538,15 @@ Resources:
   LambdaSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupName: !Sub ${EnvironmentName}-LambdaSecurityGroup
+      GroupName: !Sub 
+        - "${ClusterName}-${Environment}-lambda-sg-${ClusterIdShort}"
+        - Environment: !If 
+          - IsProduction
+          - "prod"
+          - !If 
+            - IsStaging
+            - "staging"
+            - "dev"
       GroupDescription: Security group for Lambda functions in Private App Zone
       VpcId: !Ref VPC
       SecurityGroupEgress:
@@ -496,7 +564,15 @@ Resources:
           Description: Allow HTTP to internet
       Tags:
         - Key: Name
-          Value: !Sub ${EnvironmentName}-LambdaSecurityGroup
+          Value: !Sub 
+            - "${ClusterName}-${Environment}-lambda-sg-${ClusterIdShort}"
+            - Environment: !If 
+              - IsProduction
+              - "prod"
+              - !If 
+                - IsStaging
+                - "staging"
+                - "dev"
         - Key: Type
           Value: !Ref ClusterType
         - Key: Environment
@@ -510,7 +586,15 @@ Resources:
   DBSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupName: !Sub ${EnvironmentName}-DBSecurityGroup
+      GroupName: !Sub 
+        - "${ClusterName}-${Environment}-db-sg-${ClusterIdShort}"
+        - Environment: !If 
+          - IsProduction
+          - "prod"
+          - !If 
+            - IsStaging
+            - "staging"
+            - "dev"
       GroupDescription: Security group for database resources (Aurora MySQL, RDS Proxy, Redis, Vault) in Private DB Zone
       VpcId: !Ref VPC
       SecurityGroupIngress:
@@ -540,7 +624,15 @@ Resources:
           Description: Allow Vault from Lambda Security Group
       Tags:
         - Key: Name
-          Value: !Sub ${EnvironmentName}-DBSecurityGroup
+          Value: !Sub 
+            - "${ClusterName}-${Environment}-db-sg-${ClusterIdShort}"
+            - Environment: !If 
+              - IsProduction
+              - "prod"
+              - !If 
+                - IsStaging
+                - "staging"
+                - "dev"
         - Key: Type
           Value: !Ref ClusterType
         - Key: Environment
