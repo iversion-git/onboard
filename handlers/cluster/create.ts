@@ -30,7 +30,7 @@ export const createHandler: RouteHandler = async (req, res) => {
       return;
     }
 
-    const { name, type, environment, region, cidr, code_bucket, bref_layer_arn } = validation.data;
+    const { name, type, environment, region, cidr, code_bucket, bref_layer_arn, api_domain, certificate_arn } = validation.data;
 
     // Create cluster record (CIDR validation and overlap checking is handled in dynamoDBHelper.createCluster)
     const clusterData = {
@@ -41,6 +41,8 @@ export const createHandler: RouteHandler = async (req, res) => {
       cidr,
       code_bucket,
       bref_layer_arn,
+      api_domain,
+      certificate_arn,
       status: 'In-Active' as const,
     };
 

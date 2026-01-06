@@ -44,6 +44,19 @@ Parameters:
     MinLength: 1
     ConstraintDescription: Must specify the Bref PHP layer ARN
 
+  # API Domain Configuration
+  ApiDomain:
+    Type: String
+    Description: Custom API domain name (e.g., tenant1.au.myapp.com)
+    MinLength: 1
+    ConstraintDescription: Must specify the API domain name
+
+  CertificateArn:
+    Type: String
+    Description: ACM certificate ARN for the API domain
+    MinLength: 1
+    ConstraintDescription: Must specify the ACM certificate ARN
+
   ProjectName:
     Type: String
     Description: Optional project name for resource tagging
@@ -165,7 +178,7 @@ Resources:
             Allow: {}
           Statement:
             ByteMatchStatement:
-              SearchString: cf-secret-header-xyz789abc123
+              SearchString: cf-secret-a8b9c2d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6
               FieldToMatch:
                 SingleHeader:
                   Name: x-cloudfront-secret
@@ -289,6 +302,38 @@ Resources:
     Properties:
       ResourceArn: !Sub "arn:aws:apigateway:${AWS::Region}::/restapis/${RestApi}/stages/${Stage}"
       WebACLArn: !GetAtt ApiGatewayWAF.Arn
+
+  # ==========================================
+  # API Gateway Custom Domain
+  # ==========================================
+  
+  ApiGatewayDomainName:
+    Type: AWS::ApiGateway::DomainName
+    Properties:
+      DomainName: !Ref ApiDomain
+      RegionalCertificateArn: !Ref CertificateArn
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+      SecurityPolicy: TLS_1_2
+      Tags:
+        - Key: Name
+          Value: !Sub ${ClusterName}-ApiDomain
+        - Key: Type
+          Value: !Ref ClusterType
+        - Key: Environment
+          Value: !Ref ClusterEnvironment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # API Gateway Base Path Mapping
+  ApiGatewayBasePathMapping:
+    Type: AWS::ApiGateway::BasePathMapping
+    DependsOn: ApiDeployment
+    Properties:
+      DomainName: !Ref ApiGatewayDomainName
+      RestApiId: !Ref RestApi
+      Stage: !Ref Stage
 
   # -----------------------
   # Private S3 bucket for tenant data (per-tenant "folders" are key prefixes)
@@ -622,16 +667,22 @@ Resources:
 Outputs:
   # API Gateway Outputs
   ApiUrl:
-    Description: REST API endpoint
-    Value: !Sub "https://${RestApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/"
+    Description: Custom API domain URL
+    Value: !Sub "https://${ApiDomain}/"
     Export:
       Name: !Sub ${EnvironmentName}-ApiUrl
 
   ApiGatewayDomainName:
-    Description: API Gateway domain name (for CloudFront origin)
-    Value: !Sub "${RestApi}.execute-api.${AWS::Region}.amazonaws.com"
+    Description: API Gateway custom domain name
+    Value: !Ref ApiDomain
     Export:
       Name: !Sub ${EnvironmentName}-ApiGatewayDomainName
+
+  ApiGatewayRegionalDomainName:
+    Description: API Gateway regional domain name (for DNS CNAME)
+    Value: !GetAtt ApiGatewayDomainName.RegionalDomainName
+    Export:
+      Name: !Sub ${EnvironmentName}-ApiGatewayRegionalDomainName
 
   # Lambda Function Outputs
   WebFunctionName:

@@ -135,6 +135,8 @@ export const deployHandler: RouteHandler = async (req, res) => {
         { ParameterKey: 'TemplateS3KeyPrefix', ParameterValue: '' }, // No prefix for now
         { ParameterKey: 'CodeBucketName', ParameterValue: cluster.code_bucket }, // Use value from cluster record
         { ParameterKey: 'BrefLayerArn', ParameterValue: cluster.bref_layer_arn },
+        { ParameterKey: 'ApiDomain', ParameterValue: cluster.api_domain },
+        { ParameterKey: 'CertificateArn', ParameterValue: cluster.certificate_arn },
         // Cluster-specific parameters for tagging
         { ParameterKey: 'ClusterName', ParameterValue: cluster.name },
         { ParameterKey: 'ClusterType', ParameterValue: cluster.type === 'dedicated' ? 'Dedicated' : 'Shared' },

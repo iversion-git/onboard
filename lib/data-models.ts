@@ -47,6 +47,8 @@ export interface ClusterRecord {
   cidr: string;               // Network CIDR block
   code_bucket: string;        // S3 bucket for Lambda function code
   bref_layer_arn: string;     // Bref PHP layer ARN for the region
+  api_domain: string;         // Custom API domain (e.g., tenant1.au.myapp.com)
+  certificate_arn: string;    // ACM certificate ARN for the API domain
   status: 'In-Active' | 'Deploying' | 'Active' | 'Failed';
   deployment_status?: string; // CloudFormation stack status
   deployment_id?: string;     // CloudFormation stack ARN
@@ -120,6 +122,8 @@ export const ClusterRecordSchema = z.object({
   }),
   code_bucket: z.string().min(1).max(255),
   bref_layer_arn: z.string().min(1),
+  api_domain: z.string().min(1).max(255),
+  certificate_arn: z.string().min(1),
   status: z.enum(['In-Active', 'Deploying', 'Active', 'Failed']),
   deployment_status: z.string().optional(),
   deployment_id: z.string().optional(),
@@ -171,6 +175,8 @@ export const CreateClusterSchema = z.object({
   }),
   code_bucket: z.string().min(1).max(255),
   bref_layer_arn: z.string().min(1),
+  api_domain: z.string().min(1).max(255),
+  certificate_arn: z.string().min(1),
 });
 
 export const UpdateClusterSchema = z.object({

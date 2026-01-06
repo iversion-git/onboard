@@ -145,18 +145,13 @@ Resources:
         Comment: !Sub ${EnvironmentName} Edge Distribution - Vue.js SPA + API Gateway
         Enabled: true
         HttpVersion: http2
-        PriceClass: PriceClass_100
+        PriceClass: PriceClass_All
         
         # Custom domain configuration (wildcard support)
-        # Note: For wildcard domains like *.flowrix.app, aliases are managed via Route53
+        # Note: For wildcard domains like *.flowrix.app, we can set the alias
         # CloudFront will accept any subdomain that matches the certificate
-        Aliases: !If
-          - IsWildcardDomain
-          - !Ref AWS::NoValue  # No specific aliases for wildcard - handled by certificate
-          - !If
-            - HasCustomDomain
-            - [!Ref CustomDomainName]
-            - !Ref AWS::NoValue
+        Aliases:
+          - "*.flowrix.app"
         
         ViewerCertificate: !If
           - HasCustomDomain
@@ -182,10 +177,9 @@ Resources:
             S3OriginConfig:
               OriginAccessIdentity: ""
           
-          # API Gateway Origin for /api/* routes
+          # API Gateway Origin for /api/* routes (no stage path)
           - Id: ApiGatewayOrigin
             DomainName: !Ref ApiGatewayDomainName
-            OriginPath: !Sub /${Stage}
             CustomOriginConfig:
               HTTPPort: 443
               HTTPSPort: 443
@@ -194,11 +188,11 @@ Resources:
                 - TLSv1.2
             OriginCustomHeaders:
               - HeaderName: x-cloudfront-secret
-                HeaderValue: cf-secret-header-xyz789abc123
+                HeaderValue: cf-secret-a8b9c2d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6
         
         # Cache Behaviors
         CacheBehaviors:
-          # API routes - no caching, forward all headers, custom header added
+          # API routes - no caching, forward all headers except host, custom header added
           - PathPattern: "/api/*"
             TargetOriginId: ApiGatewayOrigin
             ViewerProtocolPolicy: redirect-to-https
@@ -214,8 +208,7 @@ Resources:
               - GET
               - HEAD
             CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad  # CachingDisabled
-            OriginRequestPolicyId: 216adef6-5c7f-47e4-b989-5492eafa07d3  # AllViewer
-            ResponseHeadersPolicyId: 67f7725c-6f97-4210-82d7-5512b31e9d03  # SecurityHeadersPolicy
+            OriginRequestPolicyId: 88a5eaf4-2fd4-4709-b370-b4c650ea3fcf  # AllViewerExceptHostHeader
             Compress: false
           
           # Dev portal - Vue.js SPA (files are in /dev-portal/ folder in S3)
@@ -225,13 +218,10 @@ Resources:
             AllowedMethods:
               - GET
               - HEAD
-              - OPTIONS
             CachedMethods:
               - GET
               - HEAD
             CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6  # CachingOptimized
-            OriginRequestPolicyId: 88a5eaf4-2fd4-4709-b370-b4c650ea3fcf  # CORS-S3Origin
-            ResponseHeadersPolicyId: 67f7725c-6f97-4210-82d7-5512b31e9d03  # SecurityHeadersPolicy
             Compress: true
         
         # Default behavior - Production portal (uses S3PortalOrigin with /portal prefix)
@@ -241,13 +231,10 @@ Resources:
           AllowedMethods:
             - GET
             - HEAD
-            - OPTIONS
           CachedMethods:
             - GET
             - HEAD
           CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6  # CachingOptimized
-          OriginRequestPolicyId: 88a5eaf4-2fd4-4709-b370-b4c650ea3fcf  # CORS-S3Origin
-          ResponseHeadersPolicyId: 67f7725c-6f97-4210-82d7-5512b31e9d03  # SecurityHeadersPolicy
           Compress: true
         
         # Custom error pages for SPA routing
