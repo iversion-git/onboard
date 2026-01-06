@@ -169,31 +169,11 @@ Resources:
       Description: Regional WAF to protect API Gateway - Block all except CloudFront with custom header
       Scope: REGIONAL
       DefaultAction:
-        Block: {}  # Block all by default
+        Block: {}  # Block all by default - no allow rules needed since no CloudFront
       Rules:
-        # Allow only CloudFront with custom header (highest priority)
-        - Name: AllowCloudFrontOnly
-          Priority: 1
-          Action:
-            Allow: {}
-          Statement:
-            ByteMatchStatement:
-              SearchString: cf-secret-a8b9c2d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6
-              FieldToMatch:
-                SingleHeader:
-                  Name: x-cloudfront-secret
-              TextTransformations:
-                - Priority: 0
-                  Type: NONE
-              PositionalConstraint: EXACTLY
-          VisibilityConfig:
-            SampledRequestsEnabled: true
-            CloudWatchMetricsEnabled: true
-            MetricName: AllowCloudFrontOnlyMetric
-        
-        # AWS Managed Rule - Core Rule Set (OWASP Top 10) - only applies to allowed traffic
+        # AWS Managed Rule - Core Rule Set (OWASP Top 10) - Priority 1
         - Name: AWSManagedRulesCommonRuleSet
-          Priority: 2
+          Priority: 1
           OverrideAction:
             None: {}
           Statement:
@@ -205,9 +185,9 @@ Resources:
             CloudWatchMetricsEnabled: true
             MetricName: CommonRuleSetMetric
         
-        # AWS Managed Rule - Known Bad Inputs
+        # AWS Managed Rule - Known Bad Inputs - Priority 2
         - Name: AWSManagedRulesKnownBadInputsRuleSet
-          Priority: 3
+          Priority: 2
           OverrideAction:
             None: {}
           Statement:
@@ -219,9 +199,9 @@ Resources:
             CloudWatchMetricsEnabled: true
             MetricName: KnownBadInputsMetric
         
-        # AWS Managed Rule - PHP Application Protection
+        # AWS Managed Rule - PHP Application Protection - Priority 3
         - Name: AWSManagedRulesPHPRuleSet
-          Priority: 4
+          Priority: 3
           OverrideAction:
             None: {}
           Statement:
@@ -233,9 +213,37 @@ Resources:
             CloudWatchMetricsEnabled: true
             MetricName: PHPRuleSetMetric
         
-        # AWS Managed Rule - IP Reputation
-        - Name: AWSManagedRulesAmazonIpReputationList
+        # AWS Managed Rule - Linux Operating System Protection - Priority 4
+        - Name: AWSManagedRulesLinuxRuleSet
+          Priority: 4
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesLinuxRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: LinuxRuleSetMetric
+        
+        # AWS Managed Rule - SQL Database Protection - Priority 5
+        - Name: AWSManagedRulesSQLiRuleSet
           Priority: 5
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesSQLiRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: SQLiRuleSetMetric
+        
+        # AWS Managed Rule - IP Reputation (includes anonymous IPs) - Priority 6
+        - Name: AWSManagedRulesAmazonIpReputationList
+          Priority: 6
           OverrideAction:
             None: {}
           Statement:
@@ -247,19 +255,47 @@ Resources:
             CloudWatchMetricsEnabled: true
             MetricName: IpReputationMetric
         
-        # Rate limiting for API endpoints
-        - Name: ApiRateLimitRule
-          Priority: 6
+        # AWS Managed Rule - Anonymous IP List - Priority 7
+        - Name: AWSManagedRulesAnonymousIpList
+          Priority: 7
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesAnonymousIpList
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: AnonymousIpListMetric
+        
+        # AWS Managed Rule - Bot Control (blocks all bots including search engines) - Priority 8
+        - Name: AWSManagedRulesBotControlRuleSet
+          Priority: 8
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesBotControlRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: BotControlMetric
+        
+        # Strict Rate Limiting - 50 requests per minute per IP - Priority 9
+        - Name: StrictApiRateLimitRule
+          Priority: 9
           Action:
             Block: {}
           Statement:
             RateBasedStatement:
-              Limit: 2000  # 2000 requests per 5 minutes per IP
+              Limit: 50  # 50 requests per 5 minutes per IP (10 requests per minute average)
               AggregateKeyType: IP
           VisibilityConfig:
             SampledRequestsEnabled: true
             CloudWatchMetricsEnabled: true
-            MetricName: ApiRateLimitMetric
+            MetricName: StrictApiRateLimitMetric
       
       VisibilityConfig:
         SampledRequestsEnabled: true
@@ -341,9 +377,7 @@ Resources:
   PrivateDataBucket:
     Type: AWS::S3::Bucket
     Properties:
-      # Generate unique bucket name using stack ID or timestamp
-      # BucketName: !Sub "${AppName}-private-${AWS::AccountId}-${AWS::Region}-${Stage}-${EnvironmentName}"
-      # Let CloudFormation auto-generate unique name
+      BucketName: !Sub "${ClusterName}-${ClusterEnvironment}-bucket-${EnvironmentName}"
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         IgnorePublicAcls: true
@@ -378,14 +412,49 @@ Resources:
           - !Ref AWS::NoValue
 
   # -----------------------
-  # SQS queue
+  # Dead Letter Queue for failed jobs
+  # -----------------------
+  AppDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${ClusterName}-${ClusterEnvironment}-deadletter-${EnvironmentName}"
+      MessageRetentionPeriod: 1209600  # 14 days
+      Tags:
+        - Key: Name
+          Value: !Sub ${ClusterName}-DeadLetterQueue
+        - Key: Type
+          Value: !Ref ClusterType
+        - Key: Environment
+          Value: !Ref ClusterEnvironment
+        - Key: ManagedBy
+          Value: CloudFormation
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  # -----------------------
+  # SQS queue with dead letter queue
   # -----------------------
   AppQueue:
     Type: AWS::SQS::Queue
     Properties:
-      # Let CloudFormation auto-generate unique queue name
-      # QueueName: !Sub "${QueueName}-${EnvironmentName}"
+      QueueName: !Sub "${ClusterName}-${ClusterEnvironment}-appqueue-${EnvironmentName}"
       VisibilityTimeout: 120
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt AppDeadLetterQueue.Arn
+        maxReceiveCount: 3  # After 3 failed attempts, move to dead letter queue
       Tags:
         - Key: Name
           Value: !Sub ${ClusterName}-AppQueue
@@ -502,7 +571,7 @@ Resources:
   WebFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub "${AppName}-web-${Stage}"
+      FunctionName: !Sub "${ClusterName}-${ClusterEnvironment}-${EnvironmentName}-web"
       Handler: public/index.php
       CodeUri:
         Bucket: !Ref CodeBucketName
@@ -534,7 +603,7 @@ Resources:
   WorkerFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub "${AppName}-worker-${Stage}"
+      FunctionName: !Sub "${ClusterName}-${ClusterEnvironment}-${EnvironmentName}-worker"
       Handler: artisan
       CodeUri:
         Bucket: !Ref CodeBucketName
@@ -619,8 +688,7 @@ Resources:
   EnqueueSchedule:
     Type: AWS::Scheduler::Schedule
     Properties:
-      # Let CloudFormation auto-generate unique schedule name
-      # Name: !Sub "${AppName}-enqueue-schedule-${Stage}"
+      Name: !Sub "${ClusterName}-${ClusterEnvironment}-scheduler-${EnvironmentName}"
       FlexibleTimeWindow:
         Mode: "OFF"
       ScheduleExpression: "rate(5 minutes)"
@@ -637,7 +705,7 @@ Resources:
   ArtisanFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub "${AppName}-artisan-${Stage}"
+      FunctionName: !Sub "${ClusterName}-${ClusterEnvironment}-${EnvironmentName}-artisan"
       Handler: artisan
       CodeUri:
         Bucket: !Ref CodeBucketName
@@ -715,6 +783,18 @@ Outputs:
     Value: !GetAtt AppQueue.Arn
     Export:
       Name: !Sub ${EnvironmentName}-QueueArn
+
+  DeadLetterQueueUrl:
+    Description: Dead letter queue URL
+    Value: !Ref AppDeadLetterQueue
+    Export:
+      Name: !Sub ${EnvironmentName}-DeadLetterQueueUrl
+
+  DeadLetterQueueArn:
+    Description: Dead letter queue ARN
+    Value: !GetAtt AppDeadLetterQueue.Arn
+    Export:
+      Name: !Sub ${EnvironmentName}-DeadLetterQueueArn
 
   # S3 Outputs
   PrivateBucketName:
