@@ -144,10 +144,23 @@ Parameters:
       - Dev
     ConstraintDescription: Must be Production, Staging, or Dev
 
+  ClusterIdShort:
+    Type: String
+    Description: Short cluster ID (first 8 characters) for resource naming
+    MinLength: 8
+    MaxLength: 8
+    AllowedPattern: ^[a-f0-9]{8}$
+    ConstraintDescription: Must be exactly 8 lowercase hexadecimal characters
+
 Conditions:
   # Conditions for optional custom tags
   HasProjectName: !Not [!Equals [!Ref ProjectName, '']]
   HasCostCenter: !Not [!Equals [!Ref CostCenter, '']]
+  HasOwner: !Not [!Equals [!Ref Owner, '']]
+  
+  # Environment mapping conditions (Production -> prod, Staging -> staging, Dev -> dev)
+  IsProduction: !Equals [!Ref ClusterEnvironment, 'Production']
+  IsStaging: !Equals [!Ref ClusterEnvironment, 'Staging']
   HasOwner: !Not [!Equals [!Ref Owner, '']]
   
   # Condition for deletion protection
@@ -162,7 +175,15 @@ Resources:
   RDSProxySecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupName: !Sub ${EnvironmentName}-RDSProxySecurityGroup
+      GroupName: !Sub 
+        - "${ClusterName}-${Environment}-rdsproxy-sg-${ClusterIdShort}"
+        - Environment: !If 
+          - IsProduction
+          - 'prod'
+          - !If 
+            - IsStaging
+            - 'staging'
+            - 'dev'
       GroupDescription: Security group for RDS Proxy
       VpcId: !ImportValue
         'Fn::Sub': '${EnvironmentName}-VPC'
@@ -208,7 +229,15 @@ Resources:
   AuroraSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupName: !Sub ${EnvironmentName}-AuroraSecurityGroup
+      GroupName: !Sub 
+        - "${ClusterName}-${Environment}-aurora-sg-${ClusterIdShort}"
+        - Environment: !If 
+          - IsProduction
+          - 'prod'
+          - !If 
+            - IsStaging
+            - 'staging'
+            - 'dev'
       GroupDescription: Security group for Aurora MySQL cluster
       VpcId: !ImportValue
         'Fn::Sub': '${EnvironmentName}-VPC'
@@ -258,7 +287,15 @@ Resources:
     Type: AWS::RDS::DBSubnetGroup
     DeletionPolicy: Delete
     Properties:
-      DBSubnetGroupName: !Sub ${EnvironmentName}-db-subnet-group
+      DBSubnetGroupName: !Sub 
+        - "${ClusterName}-${Environment}-db-subnet-group-${ClusterIdShort}"
+        - Environment: !If 
+          - IsProduction
+          - 'prod'
+          - !If 
+            - IsStaging
+            - 'staging'
+            - 'dev'
       DBSubnetGroupDescription: Subnet group for Aurora MySQL cluster
       SubnetIds: !Split
         - ','
@@ -296,7 +333,15 @@ Resources:
     DependsOn:
       - DBSubnetGroup
     Properties:
-      DBClusterIdentifier: !Sub ${EnvironmentName}-aurora-mysql
+      DBClusterIdentifier: !Sub 
+        - "${ClusterName}-${Environment}-aurora-mysql-${ClusterIdShort}"
+        - Environment: !If 
+          - IsProduction
+          - 'prod'
+          - !If 
+            - IsStaging
+            - 'staging'
+            - 'dev'
       Engine: aurora-mysql
       EngineMode: provisioned
       ServerlessV2ScalingConfiguration:
@@ -350,7 +395,15 @@ Resources:
     Type: AWS::RDS::DBInstance
     DeletionPolicy: Delete
     Properties:
-      DBInstanceIdentifier: !Sub ${EnvironmentName}-aurora-writer
+      DBInstanceIdentifier: !Sub 
+        - "${ClusterName}-${Environment}-aurora-writer-${ClusterIdShort}"
+        - Environment: !If 
+          - IsProduction
+          - 'prod'
+          - !If 
+            - IsStaging
+            - 'staging'
+            - 'dev'
       DBClusterIdentifier: !Ref AuroraCluster
       DBInstanceClass: db.serverless
       Engine: aurora-mysql
@@ -435,7 +488,15 @@ Resources:
     DependsOn: 
       - AuroraCluster
     Properties:
-      DBProxyName: !Sub ${EnvironmentName}-aurora-proxy
+      DBProxyName: !Sub 
+        - "${ClusterName}-${Environment}-aurora-proxy-${ClusterIdShort}"
+        - Environment: !If 
+          - IsProduction
+          - 'prod'
+          - !If 
+            - IsStaging
+            - 'staging'
+            - 'dev'
       EngineFamily: MYSQL
       Auth:
         - AuthScheme: SECRETS
@@ -501,7 +562,15 @@ Resources:
           'Fn::Sub': '${EnvironmentName}-PrivateDBSubnets'
       Tags:
         - Key: Name
-          Value: !Sub ${EnvironmentName}-redis-subnet-group
+          Value: !Sub 
+            - "${ClusterName}-${Environment}-redis-subnet-group-${ClusterIdShort}"
+            - Environment: !If 
+              - IsProduction
+              - 'prod'
+              - !If 
+                - IsStaging
+                - 'staging'
+                - 'dev'
         - Key: Type
           Value: !Ref ClusterType
         - Key: Environment
@@ -531,7 +600,15 @@ Resources:
       - RedisSubnetGroup
       - AuroraSecurityGroup
     Properties:
-      ServerlessCacheName: !Sub ${EnvironmentName}-redis-cache
+      ServerlessCacheName: !Sub 
+        - "${ClusterName}-${Environment}-redis-cache-${ClusterIdShort}"
+        - Environment: !If 
+          - IsProduction
+          - 'prod'
+          - !If 
+            - IsStaging
+            - 'staging'
+            - 'dev'
       Engine: redis
       Description: Serverless Redis cache for application data
       MajorEngineVersion: 7
