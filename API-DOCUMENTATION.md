@@ -276,13 +276,16 @@ Error responses:
 **Request Body**:
 ```json
 {
-  "name": "Acme Corporation",              // ✅ Required - 1-255 characters
-  "email": "contact@acme.com",             // ✅ Required - Valid email address
-  "contact_info": {                        // ❌ Optional - Contact details
-    "phone": "+1-555-123-4567",           // ❌ Optional - Phone number
-    "address": "123 Main St, City, State", // ❌ Optional - Physical address
-    "company": "Acme Corp"                 // ❌ Optional - Company name
-  }
+  "name": "John Smith",                        // ✅ Required - Contact person name (1-255 characters)
+  "email": "john.smith@acme.com",              // ✅ Required - Contact email address
+  "mobile_number": "+1-555-123-4567",         // ✅ Required - Contact mobile number (1-20 characters)
+  "business_name": "Acme Corporation",         // ✅ Required - Business or company name (1-255 characters)
+  "deployment_type": "Shared",                 // ✅ Required - "Shared" or "Dedicated"
+  "region": "Australia",                       // ✅ Required - "Australia", "US", "UK", or "Europe"
+  "tenant_url": "acme123",                     // ✅ Required - Tenant subdomain (1-50 chars, lowercase letters and numbers only)
+  "subscription_type": "General",              // ✅ Required - "General", "Made to Measure", "Automotive", or "Rental"
+  "package_name": "Professional",              // ✅ Required - "Essential", "Professional", "Premium", or "Enterprise"
+  "cluster_id": "550e8400-e29b-41d4-a716-446655440004"  // ❌ Optional - Specific cluster ID to assign tenant to
 }
 ```
 
@@ -292,25 +295,130 @@ Error responses:
   "success": true,
   "data": {
     "tenant_id": "550e8400-e29b-41d4-a716-446655440003",
-    "name": "Acme Corporation",
-    "email": "contact@acme.com",
-    "contact_info": {
-      "phone": "+1-555-123-4567",
-      "address": "123 Main St, City, State",
-      "company": "Acme Corp"
-    },
-    "status": "pending",
-    "created_at": "2025-12-26T05:00:00.000Z"
+    "name": "John Smith",
+    "email": "john.smith@acme.com",
+    "mobile_number": "+1-555-123-4567",
+    "business_name": "Acme Corporation",
+    "status": "Pending",
+    "deployment_type": "Shared",
+    "region": "Australia",
+    "tenant_url": "acme123",
+    "subscription_type": "General",
+    "package_name": "Professional",
+    "cluster_id": "550e8400-e29b-41d4-a716-446655440004",
+    "created_at": "2025-01-07T05:00:00.000Z",
+    "updated_at": "2025-01-07T05:00:00.000Z"
   },
-  "timestamp": "2025-12-26T05:00:00.000Z"
+  "timestamp": "2025-01-07T05:00:00.000Z"
 }
 ```
+
+**Field Descriptions**:
+- `name`: Contact person's full name
+- `email`: Primary contact email address (automatically converted to lowercase)
+- `mobile_number`: Contact mobile/phone number
+- `business_name`: Official business or company name
+- `status`: Automatically set to "Pending" on creation
+- `deployment_type`: Infrastructure deployment preference
+- `region`: Preferred geographic region for deployment
+- `tenant_url`: Unique subdomain identifier (e.g., "acme123" becomes "acme123.myapp.com")
+- `subscription_type`: Type of subscription service
+- `package_name`: Service package level
+- `cluster_id`: Optional specific cluster assignment (must match deployment type)
+
+**Status Values**:
+- `Pending`: Newly created, awaiting provisioning
+- `Active`: Fully provisioned and operational
+- `Suspended`: Temporarily disabled
+- `Terminated`: Permanently disabled
+
+**Subscription Types**:
+- `General`: Standard business subscription
+- `Made to Measure`: Custom tailored solutions
+- `Automotive`: Automotive industry specific
+- `Rental`: Rental business focused
+
+**Package Names**:
+- `Essential`: Basic feature set
+- `Professional`: Enhanced features for growing businesses
+- `Premium`: Advanced features for established businesses
+- `Enterprise`: Full feature set for large organizations
+
+**Cluster Assignment**:
+- If `cluster_id` is provided, the cluster must exist, be active, and match the tenant's deployment type
+- Shared tenants can only be assigned to shared clusters
+- Dedicated tenants can only be assigned to dedicated clusters
+- If not provided, cluster assignment can be done later during provisioning
 
 **Error Responses**:
 - `401 Unauthorized` - Missing or invalid JWT token
 - `403 Forbidden` - Insufficient permissions (not admin or manager)
-- `409 Conflict` - Tenant already exists
-- `400 ValidationError` - Invalid name, email, or contact info
+- `409 Conflict` - Tenant URL is already taken
+- `400 ValidationError` - Invalid field values, format, or cluster assignment
+
+---
+
+### GET /tenant/available-clusters
+**Description**: Get available clusters based on deployment type
+
+**Authentication**: ✅ Required (Admin or Manager only)
+
+**Query Parameters**:
+- `deployment_type` (required): "Shared" or "Dedicated"
+
+**Example Request**:
+```
+GET /tenant/available-clusters?deployment_type=Shared
+```
+
+**Success Response (200)**:
+```json
+{
+  "success": true,
+  "data": {
+    "deployment_type": "Shared",
+    "available_clusters": [
+      {
+        "cluster_id": "550e8400-e29b-41d4-a716-446655440004",
+        "name": "Shared Production Cluster",
+        "type": "shared",
+        "environment": "Production",
+        "region": "ap-southeast-2",
+        "status": "Active",
+        "created_at": "2025-01-07T05:00:00.000Z",
+        "deployed_at": "2025-01-07T05:15:00.000Z"
+      },
+      {
+        "cluster_id": "550e8400-e29b-41d4-a716-446655440005",
+        "name": "Shared Staging Cluster",
+        "type": "shared",
+        "environment": "Staging",
+        "region": "ap-southeast-2",
+        "status": "Active",
+        "created_at": "2025-01-06T10:00:00.000Z",
+        "deployed_at": "2025-01-06T10:20:00.000Z"
+      }
+    ],
+    "total_count": 2
+  },
+  "timestamp": "2025-01-07T05:00:00.000Z"
+}
+```
+
+**Response Fields**:
+- `deployment_type`: The requested deployment type filter
+- `available_clusters`: Array of active clusters matching the deployment type
+- `total_count`: Number of available clusters
+
+**Cluster Information**:
+- Only returns clusters with status "Active"
+- Clusters are filtered by type (shared/dedicated) to match deployment type
+- Includes basic cluster information needed for tenant assignment
+
+**Error Responses**:
+- `401 Unauthorized` - Missing or invalid JWT token
+- `403 Forbidden` - Insufficient permissions (not admin or manager)
+- `400 ValidationError` - Invalid deployment_type parameter
 
 ---
 

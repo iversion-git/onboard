@@ -25,14 +25,18 @@ export interface PasswordResetToken {
 // Tenants Table Data Model
 export interface TenantRecord {
   tenant_id: string;          // PK
-  name: string;
-  email: string;
-  contact_info: {
-    phone?: string;
-    address?: string;
-    company?: string;
-  };
-  status: 'pending' | 'active' | 'suspended';
+  name: string;               // Contact name
+  email: string;              // Contact email
+  mobile_number: string;      // Contact mobile number
+  business_name: string;      // Business/company name
+  status: 'Pending' | 'Active' | 'Suspended' | 'Terminated';
+  deployment_type: 'Shared' | 'Dedicated';
+  region: 'Australia' | 'US' | 'UK' | 'Europe';
+  tenant_url: string;         // Tenant subdomain (e.g., tenant1, tenant2)
+  subscription_type?: 'General' | 'Made to Measure' | 'Automotive' | 'Rental'; // Optional for backward compatibility
+  package_name?: 'Essential' | 'Professional' | 'Premium' | 'Enterprise'; // Optional for backward compatibility
+  cluster_id: string;         // Required cluster ID for referential integrity
+  cluster_name: string;       // Required cluster name for display purposes
   created_at: string;
   updated_at: string;
 }
@@ -101,12 +105,22 @@ export const TenantRecordSchema = z.object({
   tenant_id: z.string().uuid(),
   name: z.string().min(1).max(255),
   email: z.string().email().toLowerCase(),
-  contact_info: z.object({
-    phone: z.string().optional(),
-    address: z.string().optional(),
-    company: z.string().optional(),
-  }),
-  status: z.enum(['pending', 'active', 'suspended']),
+  mobile_number: z.string().min(1).max(20),
+  business_name: z.string().min(1).max(255),
+  status: z.enum(['Pending', 'Active', 'Suspended', 'Terminated']),
+  deployment_type: z.enum(['Shared', 'Dedicated']),
+  region: z.enum(['Australia', 'US', 'UK', 'Europe']),
+  tenant_url: z.string().min(1).max(50).regex(/^[a-z0-9-]+$/, 'Tenant URL must contain only lowercase letters, numbers, and hyphens').refine(
+    (url) => !url.startsWith('-') && !url.endsWith('-'),
+    'Tenant URL cannot start or end with a hyphen'
+  ).refine(
+    (url) => !url.includes('--'),
+    'Tenant URL cannot contain consecutive hyphens'
+  ),
+  subscription_type: z.enum(['General', 'Made to Measure', 'Automotive', 'Rental']).optional(), // Make optional for backward compatibility
+  package_name: z.enum(['Essential', 'Professional', 'Premium', 'Enterprise']).optional(), // Make optional for backward compatibility
+  cluster_id: z.string().uuid(), // Required cluster ID for referential integrity
+  cluster_name: z.string().min(1).max(255), // Required cluster name for display
   created_at: z.string().datetime(),
   updated_at: z.string().datetime(),
 });
@@ -156,13 +170,22 @@ export const UpdateStaffSchema = z.object({
 });
 
 export const CreateTenantSchema = z.object({
-  name: z.string().min(1).max(255),
-  email: z.string().email().toLowerCase(),
-  contact_info: z.object({
-    phone: z.string().optional(),
-    address: z.string().optional(),
-    company: z.string().optional(),
-  }).optional().default({}),
+  name: z.string().min(1).max(255).describe('Contact person name'),
+  email: z.string().email().toLowerCase().describe('Contact email address'),
+  mobile_number: z.string().min(1).max(20).describe('Contact mobile number'),
+  business_name: z.string().min(1).max(255).describe('Business or company name'),
+  deployment_type: z.enum(['Shared', 'Dedicated']).describe('Deployment type'),
+  region: z.enum(['Australia', 'US', 'UK', 'Europe']).describe('Preferred region'),
+  tenant_url: z.string().min(1).max(50).regex(/^[a-z0-9-]+$/, 'Tenant URL must contain only lowercase letters, numbers, and hyphens').refine(
+    (url) => !url.startsWith('-') && !url.endsWith('-'),
+    'Tenant URL cannot start or end with a hyphen'
+  ).refine(
+    (url) => !url.includes('--'),
+    'Tenant URL cannot contain consecutive hyphens'
+  ).describe('Tenant subdomain (e.g., acme-corp, tenant123)'),
+  subscription_type: z.enum(['General', 'Made to Measure', 'Automotive', 'Rental']).describe('Subscription type'),
+  package_name: z.enum(['Essential', 'Professional', 'Premium', 'Enterprise']).describe('Package name'),
+  cluster_id: z.string().uuid().describe('Required cluster ID to assign tenant to specific cluster'),
 });
 
 export const CreateClusterSchema = z.object({
@@ -227,7 +250,7 @@ export const isJWTPayload = (obj: any): obj is JWTPayload => {
 // Utility types for partial updates
 export type StaffUpdate = Partial<Pick<StaffRecord, 'roles' | 'enabled' | 'updated_at'>>;
 export type StaffPasswordUpdate = Partial<Pick<StaffRecord, 'password_hash' | 'updated_at'>>;
-export type TenantUpdate = Partial<Pick<TenantRecord, 'name' | 'email' | 'contact_info' | 'status' | 'updated_at'>>;
+export type TenantUpdate = Partial<Pick<TenantRecord, 'name' | 'email' | 'mobile_number' | 'business_name' | 'status' | 'deployment_type' | 'region' | 'tenant_url' | 'subscription_type' | 'package_name' | 'cluster_id' | 'cluster_name' | 'updated_at'>>;
 export type ClusterUpdate = Partial<Pick<ClusterRecord, 'name' | 'environment' | 'status' | 'deployment_status' | 'deployment_id' | 'stack_outputs' | 'deployed_at' | 'updated_at'>>;
 
 // Database operation result types

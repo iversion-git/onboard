@@ -19,25 +19,84 @@ export const registerHandler: RouteHandler = async (req, res) => {
     if (!validation.success) {
       logger.warn('Tenant registration validation failed', {
         correlationId: req.correlationId,
-        errors: validation.error.errors,
+        errors: validation.error.issues,
       });
       sendError(
         res,
         'ValidationError',
         'Invalid tenant registration data',
         req.correlationId,
-        { validationErrors: validation.error.errors }
+        { validationErrors: validation.error.issues }
       );
       return;
     }
 
-    const { name, email, contact_info } = validation.data;
+    const { name, email, mobile_number, business_name, deployment_type, region, tenant_url, subscription_type, package_name, cluster_id } = validation.data;
 
-    // Create tenant record
+    // Validate cluster_id exists and matches deployment type (now required)
+    const clusterResult = await dynamoDBHelper.getCluster(cluster_id, req.correlationId);
+    if (!clusterResult.found || !clusterResult.cluster) {
+      logger.warn('Invalid cluster_id provided for tenant registration', {
+        correlationId: req.correlationId,
+        cluster_id,
+        deployment_type,
+      });
+      sendError(
+        res,
+        'ValidationError',
+        'Invalid cluster ID provided',
+        req.correlationId
+      );
+      return;
+    }
+
+    // Check if cluster type matches tenant deployment type
+    const expectedClusterType = deployment_type.toLowerCase();
+    if (clusterResult.cluster.type !== expectedClusterType) {
+      logger.warn('Cluster type mismatch for tenant registration', {
+        correlationId: req.correlationId,
+        cluster_id,
+        clusterType: clusterResult.cluster.type,
+        tenantDeploymentType: deployment_type,
+      });
+      sendError(
+        res,
+        'ValidationError',
+        `Cluster type '${clusterResult.cluster.type}' does not match tenant deployment type '${deployment_type}'`,
+        req.correlationId
+      );
+      return;
+    }
+
+    // Check if cluster is active
+    if (clusterResult.cluster.status !== 'Active') {
+      logger.warn('Inactive cluster provided for tenant registration', {
+        correlationId: req.correlationId,
+        cluster_id,
+        clusterStatus: clusterResult.cluster.status,
+      });
+      sendError(
+        res,
+        'ValidationError',
+        `Cluster is not active (status: ${clusterResult.cluster.status})`,
+        req.correlationId
+      );
+      return;
+    }
+
+    // Create tenant record with required cluster assignment
     const tenantData = {
       name,
       email,
-      contact_info: contact_info || {},
+      mobile_number,
+      business_name,
+      deployment_type,
+      region,
+      tenant_url,
+      subscription_type,
+      package_name,
+      cluster_id,
+      cluster_name: clusterResult.cluster.name,
     };
 
     const result = await dynamoDBHelper.createTenant(tenantData, req.correlationId);
@@ -47,10 +106,19 @@ export const registerHandler: RouteHandler = async (req, res) => {
         correlationId: req.correlationId,
         name,
         email,
+        business_name,
+        tenant_url,
         error: result.error,
       });
       
-      if (result.error?.includes('already exists') || result.error?.includes('Conflict')) {
+      if (result.error?.includes('already taken') || result.error?.includes('Conflict')) {
+        sendError(
+          res,
+          'Conflict',
+          'Tenant URL is already taken',
+          req.correlationId
+        );
+      } else if (result.error?.includes('already exists')) {
         sendError(
           res,
           'Conflict',
@@ -73,6 +141,14 @@ export const registerHandler: RouteHandler = async (req, res) => {
       tenantId: result.data?.tenant_id,
       name: result.data?.name,
       email: result.data?.email,
+      business_name: result.data?.business_name,
+      tenant_url: result.data?.tenant_url,
+      deployment_type: result.data?.deployment_type,
+      region: result.data?.region,
+      subscription_type: result.data?.subscription_type,
+      package_name: result.data?.package_name,
+      cluster_id: result.data?.cluster_id,
+      cluster_name: result.data?.cluster_name,
       status: result.data?.status,
       createdBy: req.context.staff_id,
     });
@@ -83,6 +159,10 @@ export const registerHandler: RouteHandler = async (req, res) => {
       correlationId: req.correlationId,
       tenantId: result.data?.tenant_id,
       status: result.data?.status,
+      deployment_type: result.data?.deployment_type,
+      region: result.data?.region,
+      subscription_type: result.data?.subscription_type,
+      package_name: result.data?.package_name,
     });
 
     // Return success response
@@ -92,9 +172,18 @@ export const registerHandler: RouteHandler = async (req, res) => {
         tenant_id: result.data?.tenant_id,
         name: result.data?.name,
         email: result.data?.email,
-        contact_info: result.data?.contact_info,
+        mobile_number: result.data?.mobile_number,
+        business_name: result.data?.business_name,
         status: result.data?.status,
+        deployment_type: result.data?.deployment_type,
+        region: result.data?.region,
+        tenant_url: result.data?.tenant_url,
+        subscription_type: result.data?.subscription_type,
+        package_name: result.data?.package_name,
+        cluster_id: result.data?.cluster_id,
+        cluster_name: result.data?.cluster_name,
         created_at: result.data?.created_at,
+        updated_at: result.data?.updated_at,
       },
       timestamp: new Date().toISOString(),
     });
