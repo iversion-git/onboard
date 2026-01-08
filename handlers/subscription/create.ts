@@ -32,7 +32,7 @@ export const createSubscriptionHandler: RouteHandler = async (req, res) => {
       return;
     }
 
-    const { tenant_id, subscription_type_level, domain_name } = validation.data;
+    const { tenant_id, subscription_type_level, domain_name, number_of_stores = 1 } = validation.data;
 
     // Validate tenant exists
     const tenantResult = await dynamoDBHelper.getTenant(tenant_id, req.correlationId);
@@ -218,6 +218,7 @@ export const createSubscriptionHandler: RouteHandler = async (req, res) => {
       tenant_url: tenantUrl,
       tenant_api_url: tenantApiUrl,
       domain_name,
+      number_of_stores,
       region: awsRegionCode,
       deployment_type: tenant.deployment_type,
       subscription_type_id: tenant.subscription_type_id!,
@@ -281,6 +282,7 @@ export const createSubscriptionHandler: RouteHandler = async (req, res) => {
         tenant_url: result.data?.tenant_url,
         tenant_api_url: result.data?.tenant_api_url,
         domain_name: result.data?.domain_name,
+        number_of_stores: result.data?.number_of_stores,
         region: result.data?.region,
         deployment_type: result.data?.deployment_type,
         subscription_type_id: result.data?.subscription_type_id,

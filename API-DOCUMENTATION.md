@@ -499,7 +499,8 @@ GET /tenant/available-clusters?deployment_type=Shared
 {
   "tenant_id": "550e8400-e29b-41d4-a716-446655440003",  // ✅ Required - Tenant ID to create subscription for
   "subscription_type_level": "Production",               // ✅ Required - "Production" or "Dev"
-  "domain_name": "https://mywebsite.com"                 // ✅ Required - Custom domain name
+  "domain_name": "https://mywebsite.com",                // ✅ Required - Custom domain name
+  "number_of_stores": 3                                  // ❌ Optional - Number of stores (default: 1, minimum: 1)
 }
 ```
 
@@ -515,6 +516,7 @@ GET /tenant/available-clusters?deployment_type=Shared
     "tenant_url": "tenant1.flowrix.app",
     "tenant_api_url": "tenant1.flowrix.app",
     "domain_name": "https://mywebsite.com",
+    "number_of_stores": 3,
     "region": "dedicated",
     "deployment_type": "Dedicated",
     "subscription_type_id": 1,
@@ -539,6 +541,7 @@ GET /tenant/available-clusters?deployment_type=Shared
 - `tenant_url`: Generated tenant URL (e.g., "acme-corp.flowrix.app")
 - `tenant_api_url`: Generated API URL based on deployment type and region
 - `domain_name`: Custom domain name provided by user (e.g., "https://mywebsite.com")
+- `number_of_stores`: Number of stores for this subscription (default: 1, minimum: 1)
 - `region`: AWS region code (ap-southeast-2, us-east-1, eu-west-2, eu-central-1) or "dedicated" for dedicated deployments
 - `deployment_type`: Copied from tenant (Shared or Dedicated)
 - `subscription_type_id`: Numeric ID referencing the subscription_types table
@@ -623,6 +626,7 @@ GET /subscription/list?tenant_id=550e8400-e29b-41d4-a716-446655440003
         "tenant_url": "acme-corp.flowrix.app",
         "tenant_api_url": "acme-corp.flowrix.app",
         "domain_name": "https://mywebsite.com",
+        "number_of_stores": 5,
         "region": "dedicated",
         "deployment_type": "Dedicated",
         "subscription_type_id": 1,
@@ -645,6 +649,7 @@ GET /subscription/list?tenant_id=550e8400-e29b-41d4-a716-446655440003
         "tenant_url": "acme-corp-dev-22.flowrix.app",
         "tenant_api_url": "acme-corp-dev-22.flowrix.app",
         "domain_name": "https://dev.mywebsite.com",
+        "number_of_stores": 2,
         "region": "dedicated",
         "deployment_type": "Dedicated",
         "subscription_type_id": 1,
@@ -699,6 +704,7 @@ GET /subscription/550e8400-e29b-41d4-a716-446655440005
     "tenant_url": "acme-corp.flowrix.app",
     "tenant_api_url": "acme-corp.flowrix.app",
     "domain_name": "https://mywebsite.com",
+    "number_of_stores": 5,
     "region": "dedicated",
     "deployment_type": "Dedicated",
     "subscription_type_id": 1,

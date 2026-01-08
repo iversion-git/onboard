@@ -7,7 +7,8 @@
 {
   "tenant_id": "550e8400-e29b-41d4-a716-446655440003",
   "subscription_type_level": "Production",
-  "domain_name": "https://mywebsite.com"
+  "domain_name": "https://mywebsite.com",
+  "number_of_stores": 5
 }
 ```
 **Result**: Subscription name will be auto-generated as `{tenant_url}-prod` (e.g., `acme-corp-prod`)
@@ -17,7 +18,8 @@
 {
   "tenant_id": "550e8400-e29b-41d4-a716-446655440003",
   "subscription_type_level": "Dev",
-  "domain_name": "https://dev.mywebsite.com"
+  "domain_name": "https://dev.mywebsite.com",
+  "number_of_stores": 2
 }
 ```
 **Result**: Subscription name will be auto-generated as `{tenant_url}-dev-{random2digits}` (e.g., `acme-corp-dev-22`, `acme-corp-dev-87`, `acme-corp-dev-45`)
@@ -58,6 +60,7 @@ When a subscription is created, the following information is automatically copie
 
 ### From Request:
 - **Domain Name**: Custom domain name provided by user (e.g., `https://mywebsite.com`)
+- **Number of Stores**: Number of stores for this subscription (default: 1 if not provided, minimum: 1)
 
 ### Example Subscription Response:
 ```json
@@ -69,6 +72,7 @@ When a subscription is created, the following information is automatically copie
   "tenant_url": "acme-corp.flowrix.app",
   "tenant_api_url": "acme-corp.au.flowrix.app",
   "domain_name": "https://mywebsite.com",
+  "number_of_stores": 5,
   "region": "ap-southeast-2",
   "deployment_type": "Shared",
   "subscription_type_id": 1,

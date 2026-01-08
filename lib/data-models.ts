@@ -91,6 +91,7 @@ export interface SubscriptionRecord {
   tenant_url: string;             // Generated tenant URL (e.g., acme-corp.flowrix.app)
   tenant_api_url: string;         // Generated API URL based on deployment type and region
   domain_name: string;            // Custom domain name (e.g., https://mywebsite.com)
+  number_of_stores: number;       // Number of stores (default: 1)
   region: string;                 // AWS region code (ap-southeast-2, us-east-1, eu-west-2, eu-central-1, or "dedicated")
   deployment_type: 'Shared' | 'Dedicated';
   subscription_type_id: number;   // FK to subscription_types table
@@ -234,6 +235,7 @@ export const SubscriptionRecordSchema = z.object({
   tenant_url: z.string().min(1).max(255),
   tenant_api_url: z.string().min(1).max(255),
   domain_name: z.string().url().describe('Custom domain name (e.g., https://mywebsite.com)'),
+  number_of_stores: z.number().int().min(1).default(1).describe('Number of stores (minimum 1, default 1)'),
   region: z.string().min(1).max(50), // AWS region code or "dedicated"
   deployment_type: z.enum(['Shared', 'Dedicated']),
   subscription_type_id: z.number().int().positive(), // FK to subscription_types table
@@ -316,6 +318,7 @@ export const CreateSubscriptionSchema = z.object({
   tenant_id: z.string().uuid().describe('Tenant ID to create subscription for'),
   subscription_type_level: z.enum(['Production', 'Dev']).describe('Subscription type level'),
   domain_name: z.string().url().describe('Custom domain name (e.g., https://mywebsite.com)'),
+  number_of_stores: z.number().int().min(1).default(1).optional().describe('Number of stores (minimum 1, default 1 if not provided)'),
 });
 
 export const CreateClusterSchema = z.object({
@@ -386,7 +389,7 @@ export type StaffUpdate = Partial<Pick<StaffRecord, 'roles' | 'enabled' | 'updat
 export type StaffPasswordUpdate = Partial<Pick<StaffRecord, 'password_hash' | 'updated_at'>>;
 export type LandlordUpdate = Partial<Pick<LandlordRecord, 'name' | 'domain' | 'database' | 'dbusername' | 'dbpassword' | 'dburl' | 's3id' | 'url' | 'package_id' | 'industry_id' | 'environment' | 'outlets' | 'updated_at'>>;
 export type TenantUpdate = Partial<Pick<TenantRecord, 'name' | 'email' | 'mobile_number' | 'business_name' | 'status' | 'deployment_type' | 'region' | 'tenant_url' | 'subscription_type' | 'package_name' | 'cluster_id' | 'cluster_name' | 'updated_at'>>;
-export type SubscriptionUpdate = Partial<Pick<SubscriptionRecord, 'subscription_name' | 'domain_name' | 'status' | 'deployment_id' | 'deployment_status' | 'stack_outputs' | 'deployed_at' | 'updated_at'>>;
+export type SubscriptionUpdate = Partial<Pick<SubscriptionRecord, 'subscription_name' | 'domain_name' | 'number_of_stores' | 'status' | 'deployment_id' | 'deployment_status' | 'stack_outputs' | 'deployed_at' | 'updated_at'>>;
 export type ClusterUpdate = Partial<Pick<ClusterRecord, 'name' | 'environment' | 'status' | 'deployment_status' | 'deployment_id' | 'stack_outputs' | 'deployed_at' | 'updated_at'>>;
 
 // Database operation result types

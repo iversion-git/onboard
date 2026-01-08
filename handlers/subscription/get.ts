@@ -74,6 +74,7 @@ export const getSubscriptionHandler: RouteHandler = async (req, res) => {
         tenant_url: subscription.tenant_url,
         tenant_api_url: subscription.tenant_api_url,
         domain_name: subscription.domain_name,
+        number_of_stores: subscription.number_of_stores,
         region: subscription.region,
         deployment_type: subscription.deployment_type,
         subscription_type_id: subscription.subscription_type_id,

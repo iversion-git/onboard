@@ -34,7 +34,8 @@ describe('Subscription Routes', () => {
         body: JSON.stringify({
           tenant_id: '550e8400-e29b-41d4-a716-446655440003',
           subscription_type_level: 'Production',
-          domain_name: 'https://mywebsite.com'
+          domain_name: 'https://mywebsite.com',
+          number_of_stores: 3
         }),
         isBase64Encoded: false,
         multiValueHeaders: {},
@@ -66,7 +67,7 @@ describe('Subscription Routes', () => {
         body: JSON.stringify({
           // Missing required fields
           subscription_type_level: 'Production'
-          // Missing tenant_id and domain_name
+          // Missing tenant_id, domain_name, number_of_stores is optional
         }),
         isBase64Encoded: false,
         multiValueHeaders: {},
