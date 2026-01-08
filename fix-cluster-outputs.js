@@ -45,7 +45,7 @@ async function fixClusterOutputs() {
     console.log('New format:', JSON.stringify(outputsObject, null, 2));
 
     const result = await client.send(new UpdateCommand({
-      TableName: 'Clusters-dev',
+      TableName: 'onboard-clusters-dev',
       Key: { cluster_id: '85e1f769-8147-407c-9f73-925e94345ec9' },
       UpdateExpression: 'SET stack_outputs = :outputs, updated_at = :updated_at',
       ExpressionAttributeValues: {

@@ -2,7 +2,7 @@
 # DEPLOYMENT CONFIGURATION - Edit these values to customize your deployment
 # ============================================================================
 
-service: aws-lambda-control-plane  # Change this for multiple stacks
+service: onboard-service  # Updated to use onboard-service naming
 frameworkVersion: '4'
 
 # ============================================================================
@@ -42,7 +42,7 @@ custom:
     
     # S3 Configuration for CloudFormation Templates
     s3:
-      templateBucket: "${self:service}-templates-${self:provider.stage}"
+      templateBucket: "onboard-templates-${self:provider.stage}"
     
     # Performance Monitoring Thresholds
     performance:
@@ -106,11 +106,14 @@ provider:
   environment:
     STAGE: ${self:provider.stage}
     NODE_ENV: ${self:provider.stage}
-    # DynamoDB table names with stage-scoped naming
-    DYNAMODB_STAFF_TABLE: Staff-${self:provider.stage}
-    DYNAMODB_PASSWORD_RESET_TOKENS_TABLE: PasswordResetTokens-${self:provider.stage}
-    DYNAMODB_TENANTS_TABLE: Tenants-${self:provider.stage}
-    DYNAMODB_CLUSTERS_TABLE: Clusters-${self:provider.stage}
+    # DynamoDB table names with onboard-service naming convention
+    DYNAMODB_STAFF_TABLE: onboard-staff-${self:provider.stage}
+    DYNAMODB_PASSWORD_RESET_TOKENS_TABLE: onboard-password-reset-tokens-${self:provider.stage}
+    DYNAMODB_TENANTS_TABLE: onboard-tenants-${self:provider.stage}
+    DYNAMODB_PACKAGES_TABLE: onboard-packages-${self:provider.stage}
+    DYNAMODB_SUBSCRIPTION_TYPES_TABLE: onboard-subscription-types-${self:provider.stage}
+    DYNAMODB_SUBSCRIPTIONS_TABLE: onboard-subscriptions-${self:provider.stage}
+    DYNAMODB_CLUSTERS_TABLE: onboard-clusters-${self:provider.stage}
     # JWT secret from config (Requirements 9.6)
     JWT_SECRET: ${self:custom.config.jwtSecret}
     # SES configuration from config
@@ -136,7 +139,7 @@ provider:
     apiGateway: true
   httpApi:
     # HTTP API Gateway configuration for single function (Requirements 8.4)
-    name: ${self:service}-${self:provider.stage}-api
+    name: onboard-api-${self:provider.stage}
     cors:
       allowedOrigins:
         - ${self:custom.config.corsOrigins.${self:provider.stage}}
@@ -164,7 +167,7 @@ provider:
 functions:
   # Single Lambda function with internal routing (Requirements 8.1, 8.2, 8.4)
   api:
-    name: ${self:service}-${self:provider.stage}-api
+    name: onboard-api-${self:provider.stage}
     handler: index.handler
     description: "Single Lambda function handling all API endpoints with internal routing"
     # API Gateway proxy integration with /{proxy+} routing (Requirements 8.4)
@@ -177,7 +180,7 @@ functions:
           method: ANY
     environment:
       # Function-specific environment variables
-      FUNCTION_NAME: ${self:service}-${self:provider.stage}-api
+      FUNCTION_NAME: onboard-api-${self:provider.stage}
     # Removed concurrency settings to minimize costs when not in use
     # reservedConcurrency: ${self:custom.config.reservedConcurrency}
     # provisionedConcurrency: ${self:custom.config.provisionedConcurrency}
@@ -198,7 +201,7 @@ resources:
     StaffTable:
       Type: AWS::DynamoDB::Table
       Properties:
-        TableName: Staff-${self:provider.stage}
+        TableName: onboard-staff-${self:provider.stage}
         BillingMode: PAY_PER_REQUEST
         AttributeDefinitions:
           - AttributeName: staff_id
@@ -221,7 +224,7 @@ resources:
           SSEEnabled: true
         Tags:
           - Key: Service
-            Value: ${self:service}
+            Value: onboard-service
           - Key: Stage
             Value: ${self:provider.stage}
           - Key: Architecture
@@ -231,7 +234,7 @@ resources:
     PasswordResetTokensTable:
       Type: AWS::DynamoDB::Table
       Properties:
-        TableName: PasswordResetTokens-${self:provider.stage}
+        TableName: onboard-password-reset-tokens-${self:provider.stage}
         BillingMode: PAY_PER_REQUEST
         AttributeDefinitions:
           - AttributeName: token_hash
@@ -248,7 +251,7 @@ resources:
           SSEEnabled: true
         Tags:
           - Key: Service
-            Value: ${self:service}
+            Value: onboard-service
           - Key: Stage
             Value: ${self:provider.stage}
           - Key: Architecture
@@ -258,7 +261,7 @@ resources:
     TenantsTable:
       Type: AWS::DynamoDB::Table
       Properties:
-        TableName: Tenants-${self:provider.stage}
+        TableName: onboard-tenants-${self:provider.stage}
         BillingMode: PAY_PER_REQUEST
         AttributeDefinitions:
           - AttributeName: tenant_id
@@ -272,7 +275,88 @@ resources:
           SSEEnabled: true
         Tags:
           - Key: Service
-            Value: ${self:service}
+            Value: onboard-service
+          - Key: Stage
+            Value: ${self:provider.stage}
+          - Key: Architecture
+            Value: single-function
+
+    # Packages Table
+    PackagesTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: onboard-packages-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: package_id
+            AttributeType: N
+        KeySchema:
+          - AttributeName: package_id
+            KeyType: HASH
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        SSESpecification:
+          SSEEnabled: true
+        Tags:
+          - Key: Service
+            Value: onboard-service
+          - Key: Stage
+            Value: ${self:provider.stage}
+          - Key: Architecture
+            Value: single-function
+
+    # Subscription Types Table
+    SubscriptionTypesTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: onboard-subscription-types-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: subscription_type_id
+            AttributeType: N
+        KeySchema:
+          - AttributeName: subscription_type_id
+            KeyType: HASH
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        SSESpecification:
+          SSEEnabled: true
+        Tags:
+          - Key: Service
+            Value: onboard-service
+          - Key: Stage
+            Value: ${self:provider.stage}
+          - Key: Architecture
+            Value: single-function
+
+    # Subscriptions Table
+    SubscriptionsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: onboard-subscriptions-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: subscription_id
+            AttributeType: S
+          - AttributeName: tenant_id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: subscription_id
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: TenantIndex
+            KeySchema:
+              - AttributeName: tenant_id
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+        SSESpecification:
+          SSEEnabled: true
+        Tags:
+          - Key: Service
+            Value: onboard-service
           - Key: Stage
             Value: ${self:provider.stage}
           - Key: Architecture
@@ -282,7 +366,7 @@ resources:
     ClustersTable:
       Type: AWS::DynamoDB::Table
       Properties:
-        TableName: Clusters-${self:provider.stage}
+        TableName: onboard-clusters-${self:provider.stage}
         BillingMode: PAY_PER_REQUEST
         AttributeDefinitions:
           - AttributeName: cluster_id
@@ -296,7 +380,7 @@ resources:
           SSEEnabled: true
         Tags:
           - Key: Service
-            Value: ${self:service}
+            Value: onboard-service
           - Key: Stage
             Value: ${self:provider.stage}
           - Key: Architecture
@@ -320,7 +404,7 @@ resources:
           RestrictPublicBuckets: true
         Tags:
           - Key: Service
-            Value: ${self:service}
+            Value: onboard-service
           - Key: Stage
             Value: ${self:provider.stage}
           - Key: Purpose
@@ -332,7 +416,7 @@ resources:
     LambdaDurationAlarm:
       Type: AWS::CloudWatch::Alarm
       Properties:
-        AlarmName: ${self:service}-${self:provider.stage}-lambda-duration-p95
+        AlarmName: onboard-service-${self:provider.stage}-lambda-duration-p95
         AlarmDescription: "Lambda function p95 duration exceeds threshold"
         MetricName: Duration
         Namespace: AWS/Lambda
@@ -343,14 +427,14 @@ resources:
         ComparisonOperator: GreaterThanThreshold
         Dimensions:
           - Name: FunctionName
-            Value: ${self:service}-${self:provider.stage}-api
+            Value: onboard-api-${self:provider.stage}
         TreatMissingData: notBreaching
 
     # Lambda Error Rate Alarm
     LambdaErrorRateAlarm:
       Type: AWS::CloudWatch::Alarm
       Properties:
-        AlarmName: ${self:service}-${self:provider.stage}-lambda-error-rate
+        AlarmName: onboard-service-${self:provider.stage}-lambda-error-rate
         AlarmDescription: "Lambda function error rate exceeds threshold"
         MetricName: Errors
         Namespace: AWS/Lambda
@@ -361,14 +445,14 @@ resources:
         ComparisonOperator: GreaterThanThreshold
         Dimensions:
           - Name: FunctionName
-            Value: ${self:service}-${self:provider.stage}-api
+            Value: onboard-api-${self:provider.stage}
         TreatMissingData: notBreaching
 
     # API Gateway 4xx Error Alarm
     ApiGateway4xxAlarm:
       Type: AWS::CloudWatch::Alarm
       Properties:
-        AlarmName: ${self:service}-${self:provider.stage}-api-4xx-errors
+        AlarmName: onboard-service-${self:provider.stage}-api-4xx-errors
         AlarmDescription: "API Gateway 4xx error rate exceeds threshold"
         MetricName: 4XXError
         Namespace: AWS/ApiGateway
@@ -379,14 +463,14 @@ resources:
         ComparisonOperator: GreaterThanThreshold
         Dimensions:
           - Name: ApiName
-            Value: ${self:service}-${self:provider.stage}-api
+            Value: onboard-api-${self:provider.stage}
         TreatMissingData: notBreaching
 
     # API Gateway 5xx Error Alarm
     ApiGateway5xxAlarm:
       Type: AWS::CloudWatch::Alarm
       Properties:
-        AlarmName: ${self:service}-${self:provider.stage}-api-5xx-errors
+        AlarmName: onboard-service-${self:provider.stage}-api-5xx-errors
         AlarmDescription: "API Gateway 5xx error rate exceeds threshold"
         MetricName: 5XXError
         Namespace: AWS/ApiGateway
@@ -397,7 +481,7 @@ resources:
         ComparisonOperator: GreaterThanThreshold
         Dimensions:
           - Name: ApiName
-            Value: ${self:service}-${self:provider.stage}-api
+            Value: onboard-api-${self:provider.stage}
         TreatMissingData: notBreaching
 
   Outputs:
@@ -413,60 +497,78 @@ resources:
             - ${self:provider.region}
             - '.amazonaws.com'
       Export:
-        Name: ${self:service}-${self:provider.stage}-api-url
+        Name: onboard-service-${self:provider.stage}-api-url
     
     ApiId:
       Description: HTTP API Gateway ID
       Value:
         Ref: HttpApi
       Export:
-        Name: ${self:service}-${self:provider.stage}-api-id
+        Name: onboard-service-${self:provider.stage}-api-id
     
     # Lambda function outputs
     LambdaFunctionName:
       Description: Single Lambda function name
-      Value: ${self:service}-${self:provider.stage}-api
+      Value: onboard-api-${self:provider.stage}
       Export:
-        Name: ${self:service}-${self:provider.stage}-lambda-name
+        Name: onboard-service-${self:provider.stage}-lambda-name
     
     LambdaFunctionArn:
       Description: Single Lambda function ARN
       Value:
         Fn::GetAtt: [ApiLambdaFunction, Arn]
       Export:
-        Name: ${self:service}-${self:provider.stage}-lambda-arn
+        Name: onboard-service-${self:provider.stage}-lambda-arn
     
     # DynamoDB table outputs
     StaffTableName:
       Description: Staff DynamoDB Table Name
-      Value: Staff-${self:provider.stage}
+      Value: onboard-staff-${self:provider.stage}
       Export:
-        Name: ${self:service}-${self:provider.stage}-staff-table
+        Name: onboard-service-${self:provider.stage}-staff-table
     
     PasswordResetTokensTableName:
       Description: Password Reset Tokens DynamoDB Table Name
-      Value: PasswordResetTokens-${self:provider.stage}
+      Value: onboard-password-reset-tokens-${self:provider.stage}
       Export:
-        Name: ${self:service}-${self:provider.stage}-password-reset-tokens-table
+        Name: onboard-service-${self:provider.stage}-password-reset-tokens-table
     
     TenantsTableName:
       Description: Tenants DynamoDB Table Name
-      Value: Tenants-${self:provider.stage}
+      Value: onboard-tenants-${self:provider.stage}
       Export:
-        Name: ${self:service}-${self:provider.stage}-tenants-table
+        Name: onboard-service-${self:provider.stage}-tenants-table
+
+    PackagesTableName:
+      Description: Packages DynamoDB Table Name
+      Value: onboard-packages-${self:provider.stage}
+      Export:
+        Name: onboard-service-${self:provider.stage}-packages-table
+
+    SubscriptionTypesTableName:
+      Description: Subscription Types DynamoDB Table Name
+      Value: onboard-subscription-types-${self:provider.stage}
+      Export:
+        Name: onboard-service-${self:provider.stage}-subscription-types-table
+
+    SubscriptionsTableName:
+      Description: Subscriptions DynamoDB Table Name
+      Value: onboard-subscriptions-${self:provider.stage}
+      Export:
+        Name: onboard-service-${self:provider.stage}-subscriptions-table
     
     ClustersTableName:
       Description: Clusters DynamoDB Table Name
-      Value: Clusters-${self:provider.stage}
+      Value: onboard-clusters-${self:provider.stage}
       Export:
-        Name: ${self:service}-${self:provider.stage}-clusters-table
+        Name: onboard-service-${self:provider.stage}-clusters-table
     
     # S3 bucket outputs
     TemplatesBucketName:
       Description: S3 Bucket for CloudFormation Templates
       Value: ${self:custom.config.s3.templateBucket}
       Export:
-        Name: ${self:service}-${self:provider.stage}-templates-bucket
+        Name: onboard-service-${self:provider.stage}-templates-bucket
     
     # Performance monitoring outputs
     PerformanceThresholds:
@@ -474,4 +576,4 @@ resources:
       Value:
         Fn::Sub: "p50: ${self:custom.config.performance.p50ResponseTime}ms, p95: ${self:custom.config.performance.p95ResponseTime}ms, cold start p95: ${self:custom.config.performance.p95ColdStart}ms"
       Export:
-        Name: ${self:service}-${self:provider.stage}-performance-thresholds
+        Name: onboard-service-${self:provider.stage}-performance-thresholds

@@ -5,7 +5,7 @@
 ### Update a single tenant record:
 ```bash
 aws dynamodb update-item \
-  --table-name Tenants-prod \
+  --table-name onboard-tenants-prod \
   --key '{"tenant_id": {"S": "your-tenant-id-here"}}' \
   --update-expression "SET subscription_type = :st, package_name = :pn, updated_at = :ua" \
   --expression-attribute-values '{
@@ -18,7 +18,7 @@ aws dynamodb update-item \
 ### Scan and update multiple records:
 ```bash
 # First, scan to see existing records
-aws dynamodb scan --table-name Tenants-prod
+aws dynamodb scan --table-name onboard-tenants-prod
 
 # Then update each record individually using the update-item command above
 ```

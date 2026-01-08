@@ -139,10 +139,14 @@ custom:
 
 ### DynamoDB Tables
 
-All tables use stage-scoped naming:
-- `Staff-${stage}`: Staff accounts and authentication
-- `PasswordResetTokens-${stage}`: Time-limited password reset tokens
-- `Tenants-${stage}`: Tenant registration data
+All tables use onboard-service naming convention:
+- `onboard-staff-${stage}`: Staff accounts and authentication
+- `onboard-password-reset-tokens-${stage}`: Time-limited password reset tokens
+- `onboard-tenants-${stage}`: Tenant registration data
+- `onboard-packages-${stage}`: Package definitions
+- `onboard-subscription-types-${stage}`: Subscription type definitions
+- `onboard-subscriptions-${stage}`: Subscription records
+- `onboard-clusters-${stage}`: Cluster infrastructure records
 
 ## Monitoring and Observability
 
@@ -217,7 +221,12 @@ After successful deployment, you'll receive:
 - **Function ARN**: Complete function resource name
 
 ### Database Information
-- **Staff Table**: `Staff-${stage}`
+- **Staff Table**: `onboard-staff-${stage}`
+- **Tenants Table**: `onboard-tenants-${stage}`
+- **Clusters Table**: `onboard-clusters-${stage}`
+- **Packages Table**: `onboard-packages-${stage}`
+- **Subscription Types Table**: `onboard-subscription-types-${stage}`
+- **Subscriptions Table**: `onboard-subscriptions-${stage}`
 - **Password Reset Tokens Table**: `PasswordResetTokens-${stage}`
 - **Tenants Table**: `Tenants-${stage}`
 

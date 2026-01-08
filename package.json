@@ -1,7 +1,7 @@
 {
-  "name": "aws-lambda-control-plane",
+  "name": "onboard-service",
   "version": "1.0.0",
-  "description": "AWS Lambda Control Plane API - Single Function Architecture",
+  "description": "Onboard Service API - Single Function Architecture",
   "main": "index.ts",
   "type": "module",
   "engines": {

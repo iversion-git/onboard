@@ -127,13 +127,13 @@ export function loadConfig(): AppConfig {
       },
       stage: env.STAGE,
       dynamodb: {
-        staffTable: env.DYNAMODB_STAFF_TABLE || `Staff-${env.STAGE}`,
-        passwordResetTokensTable: env.DYNAMODB_PASSWORD_RESET_TOKENS_TABLE || `PasswordResetTokens-${env.STAGE}`,
-        tenantsTable: env.DYNAMODB_TENANTS_TABLE || `Tenants-${env.STAGE}`,
-        packagesTable: env.DYNAMODB_PACKAGES_TABLE || `Packages-${env.STAGE}`,
-        subscriptionTypesTable: env.DYNAMODB_SUBSCRIPTION_TYPES_TABLE || `SubscriptionTypes-${env.STAGE}`,
-        subscriptionsTable: env.DYNAMODB_SUBSCRIPTIONS_TABLE || `Subscriptions-${env.STAGE}`,
-        clustersTable: env.DYNAMODB_CLUSTERS_TABLE || `Clusters-${env.STAGE}`,
+        staffTable: env.DYNAMODB_STAFF_TABLE || `onboard-staff-${env.STAGE}`,
+        passwordResetTokensTable: env.DYNAMODB_PASSWORD_RESET_TOKENS_TABLE || `onboard-password-reset-tokens-${env.STAGE}`,
+        tenantsTable: env.DYNAMODB_TENANTS_TABLE || `onboard-tenants-${env.STAGE}`,
+        packagesTable: env.DYNAMODB_PACKAGES_TABLE || `onboard-packages-${env.STAGE}`,
+        subscriptionTypesTable: env.DYNAMODB_SUBSCRIPTION_TYPES_TABLE || `onboard-subscription-types-${env.STAGE}`,
+        subscriptionsTable: env.DYNAMODB_SUBSCRIPTIONS_TABLE || `onboard-subscriptions-${env.STAGE}`,
+        clustersTable: env.DYNAMODB_CLUSTERS_TABLE || `onboard-clusters-${env.STAGE}`,
       },
       jwt: {
         secret: env.JWT_SECRET,
@@ -145,11 +145,11 @@ export function loadConfig(): AppConfig {
       },
       cloudformation: {
         region: env.CLOUDFORMATION_REGION || env.AWS_REGION,
-        templateBucket: env.CLOUDFORMATION_TEMPLATE_BUCKET || env.S3_TEMPLATE_BUCKET || `control-plane-templates-${env.STAGE}`,
+        templateBucket: env.CLOUDFORMATION_TEMPLATE_BUCKET || env.S3_TEMPLATE_BUCKET || `onboard-templates-${env.STAGE}`,
         crossAccountRolePrefix: env.CLOUDFORMATION_CROSS_ACCOUNT_ROLE_PREFIX,
       },
       s3: {
-        templateBucket: env.S3_TEMPLATE_BUCKET || `control-plane-templates-${env.STAGE}`,
+        templateBucket: env.S3_TEMPLATE_BUCKET || `onboard-templates-${env.STAGE}`,
         region: env.S3_REGION || env.AWS_REGION,
       },
       cors: {

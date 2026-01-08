@@ -94,9 +94,9 @@ describe('Configuration Management', () => {
       process.env['STAGE'] = 'test';
       
       const config = loadConfig();
-      expect(config.dynamodb.staffTable).toBe('Staff-test');
-      expect(config.dynamodb.passwordResetTokensTable).toBe('PasswordResetTokens-test');
-      expect(config.dynamodb.tenantsTable).toBe('Tenants-test');
+      expect(config.dynamodb.staffTable).toBe('onboard-staff-test');
+      expect(config.dynamodb.passwordResetTokensTable).toBe('onboard-password-reset-tokens-test');
+      expect(config.dynamodb.tenantsTable).toBe('onboard-tenants-test');
     });
   });
 });

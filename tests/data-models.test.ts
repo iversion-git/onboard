@@ -34,10 +34,10 @@ describe('Data Models', () => {
     resetConfig();
     process.env = { ...originalEnv };
     process.env['STAGE'] = 'test';
-    process.env['DYNAMODB_STAFF_TABLE'] = 'Staff-test';
-    process.env['DYNAMODB_PASSWORD_RESET_TOKENS_TABLE'] = 'PasswordResetTokens-test';
-    process.env['DYNAMODB_TENANTS_TABLE'] = 'Tenants-test';
-    process.env['DYNAMODB_CLUSTERS_TABLE'] = 'Clusters-test';
+    process.env['DYNAMODB_STAFF_TABLE'] = 'onboard-staff-test';
+    process.env['DYNAMODB_PASSWORD_RESET_TOKENS_TABLE'] = 'onboard-password-reset-tokens-test';
+    process.env['DYNAMODB_TENANTS_TABLE'] = 'onboard-tenants-test';
+    process.env['DYNAMODB_CLUSTERS_TABLE'] = 'onboard-clusters-test';
   });
 
   afterEach(() => {
@@ -625,10 +625,10 @@ describe('DynamoDB Access Patterns', () => {
     process.env = { ...originalEnv };
     process.env['STAGE'] = 'test';
     process.env['JWT_SECRET'] = 'this-is-a-very-long-secret-key-for-testing-purposes-123456';
-    process.env['DYNAMODB_STAFF_TABLE'] = 'Staff-test';
-    process.env['DYNAMODB_PASSWORD_RESET_TOKENS_TABLE'] = 'PasswordResetTokens-test';
-    process.env['DYNAMODB_TENANTS_TABLE'] = 'Tenants-test';
-    process.env['DYNAMODB_CLUSTERS_TABLE'] = 'Clusters-test';
+    process.env['DYNAMODB_STAFF_TABLE'] = 'onboard-staff-test';
+    process.env['DYNAMODB_PASSWORD_RESET_TOKENS_TABLE'] = 'onboard-password-reset-tokens-test';
+    process.env['DYNAMODB_TENANTS_TABLE'] = 'onboard-tenants-test';
+    process.env['DYNAMODB_CLUSTERS_TABLE'] = 'onboard-clusters-test';
     
     dynamoDBHelper = new DynamoDBHelper();
   });
@@ -669,10 +669,10 @@ describe('DynamoDB Access Patterns', () => {
 
     it('should have proper table name resolution', () => {
       const tables = dynamoDBHelper['tables'];
-      expect(tables.staff).toBe('Staff-test');
-      expect(tables.passwordResetTokens).toBe('PasswordResetTokens-test');
-      expect(tables.tenants).toBe('Tenants-test');
-      expect(tables.clusters).toBe('Clusters-test');
+      expect(tables.staff).toBe('onboard-staff-test');
+      expect(tables.passwordResetTokens).toBe('onboard-password-reset-tokens-test');
+      expect(tables.tenants).toBe('onboard-tenants-test');
+      expect(tables.clusters).toBe('onboard-clusters-test');
     });
   });
 

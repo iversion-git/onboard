@@ -16,7 +16,7 @@ import { DynamoDBDocumentClient, ScanCommand, UpdateCommand } from '@aws-sdk/lib
 
 // Configuration
 const REGION = process.env.AWS_REGION || 'ap-southeast-2';
-const TABLE_NAME = process.env.DYNAMODB_TENANTS_TABLE || 'Tenants-prod';
+const TABLE_NAME = process.env.DYNAMODB_TENANTS_TABLE || 'onboard-tenants-prod';
 
 // Default values for new fields
 const DEFAULT_SUBSCRIPTION_TYPE = 'General';

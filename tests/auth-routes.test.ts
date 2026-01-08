@@ -10,9 +10,9 @@ beforeAll(() => {
   process.env['JWT_SECRET'] = 'test-jwt-secret-that-is-at-least-32-characters-long-for-security';
   process.env['STAGE'] = 'test';
   process.env['AWS_REGION'] = 'us-east-1';
-  process.env['DYNAMODB_STAFF_TABLE'] = 'Staff-test';
-  process.env['DYNAMODB_PASSWORD_RESET_TOKENS_TABLE'] = 'PasswordResetTokens-test';
-  process.env['DYNAMODB_TENANTS_TABLE'] = 'Tenants-test';
+  process.env['DYNAMODB_STAFF_TABLE'] = 'onboard-staff-test';
+  process.env['DYNAMODB_PASSWORD_RESET_TOKENS_TABLE'] = 'onboard-password-reset-tokens-test';
+  process.env['DYNAMODB_TENANTS_TABLE'] = 'onboard-tenants-test';
   process.env['SES_FROM_EMAIL'] = 'test@example.com';
   process.env['APP_BASE_URL'] = 'https://test.example.com';
 });

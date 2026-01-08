@@ -8,11 +8,11 @@ import { registerStackRoutes } from '../routes/stack.js';
 process.env['JWT_SECRET'] = 'test-jwt-secret-that-is-at-least-32-characters-long-for-security';
 process.env['STAGE'] = 'test';
 process.env['AWS_REGION'] = 'us-east-1';
-process.env['DYNAMODB_STAFF_TABLE'] = 'Staff-test';
-process.env['DYNAMODB_PASSWORD_RESET_TOKENS_TABLE'] = 'PasswordResetTokens-test';
-process.env['DYNAMODB_TENANTS_TABLE'] = 'Tenants-test';
-process.env['DYNAMODB_STACKS_TABLE'] = 'Stacks-test';
-process.env['DYNAMODB_CLUSTERS_TABLE'] = 'Clusters-test';
+process.env['DYNAMODB_STAFF_TABLE'] = 'onboard-staff-test';
+process.env['DYNAMODB_PASSWORD_RESET_TOKENS_TABLE'] = 'onboard-password-reset-tokens-test';
+process.env['DYNAMODB_TENANTS_TABLE'] = 'onboard-tenants-test';
+process.env['DYNAMODB_STACKS_TABLE'] = 'onboard-stacks-test';
+process.env['DYNAMODB_CLUSTERS_TABLE'] = 'onboard-clusters-test';
 
 describe('Stack Routes', () => {
   let router: ReturnType<typeof createRouterForEnvironment>;

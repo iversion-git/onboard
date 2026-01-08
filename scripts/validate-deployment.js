@@ -57,9 +57,9 @@ try {
         hasErrors = true;
     }
     
-    // Check for stage-scoped table naming
-    if (serverlessConfig.includes('Staff-${self:provider.stage}')) {
-        console.log(`${GREEN}✅ Stage-scoped DynamoDB table naming configured${NC}`);
+    // Check for onboard-service naming convention
+    if (serverlessConfig.includes('onboard-staff-${self:provider.stage}')) {
+        console.log(`${GREEN}✅ Onboard-service DynamoDB table naming configured${NC}`);
     } else {
         console.log(`${RED}❌ Stage-scoped DynamoDB table naming not configured${NC}`);
         hasErrors = true;
