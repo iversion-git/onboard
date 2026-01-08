@@ -114,6 +114,7 @@ provider:
     DYNAMODB_SUBSCRIPTION_TYPES_TABLE: onboard-subscription-types-${self:provider.stage}
     DYNAMODB_SUBSCRIPTIONS_TABLE: onboard-subscriptions-${self:provider.stage}
     DYNAMODB_CLUSTERS_TABLE: onboard-clusters-${self:provider.stage}
+    DYNAMODB_LANDLORD_TABLE: landlord-${self:provider.stage}
     # JWT secret from config (Requirements 9.6)
     JWT_SECRET: ${self:custom.config.jwtSecret}
     # SES configuration from config
@@ -386,6 +387,82 @@ resources:
           - Key: Architecture
             Value: single-function
 
+    # Landlord Global Table - Multi-region replication
+    LandlordGlobalTable:
+      Type: AWS::DynamoDB::GlobalTable
+      Properties:
+        TableName: landlord-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        Replicas:
+          - Region: ap-southeast-2
+            PointInTimeRecoverySpecification:
+              PointInTimeRecoveryEnabled: true
+            SSESpecification:
+              SSEEnabled: true
+            TableClass: STANDARD
+            Tags:
+              - Key: Service
+                Value: onboard-service
+              - Key: Stage
+                Value: ${self:provider.stage}
+              - Key: TableType
+                Value: global-table
+              - Key: Region
+                Value: ap-southeast-2
+          - Region: us-east-1
+            PointInTimeRecoverySpecification:
+              PointInTimeRecoveryEnabled: true
+            SSESpecification:
+              SSEEnabled: true
+            TableClass: STANDARD
+            Tags:
+              - Key: Service
+                Value: onboard-service
+              - Key: Stage
+                Value: ${self:provider.stage}
+              - Key: TableType
+                Value: global-table
+              - Key: Region
+                Value: us-east-1
+          - Region: eu-central-1
+            PointInTimeRecoverySpecification:
+              PointInTimeRecoveryEnabled: true
+            SSESpecification:
+              SSEEnabled: true
+            TableClass: STANDARD
+            Tags:
+              - Key: Service
+                Value: onboard-service
+              - Key: Stage
+                Value: ${self:provider.stage}
+              - Key: TableType
+                Value: global-table
+              - Key: Region
+                Value: eu-central-1
+          - Region: eu-west-2
+            PointInTimeRecoverySpecification:
+              PointInTimeRecoveryEnabled: true
+            SSESpecification:
+              SSEEnabled: true
+            TableClass: STANDARD
+            Tags:
+              - Key: Service
+                Value: onboard-service
+              - Key: Stage
+                Value: ${self:provider.stage}
+              - Key: TableType
+                Value: global-table
+              - Key: Region
+                Value: eu-west-2
+        StreamSpecification:
+          StreamViewType: NEW_AND_OLD_IMAGES
+
     # S3 Bucket for CloudFormation Templates
     TemplatesBucket:
       Type: AWS::S3::Bucket
@@ -562,6 +639,12 @@ resources:
       Value: onboard-clusters-${self:provider.stage}
       Export:
         Name: onboard-service-${self:provider.stage}-clusters-table
+
+    LandlordTableName:
+      Description: Landlord Global DynamoDB Table Name
+      Value: landlord-${self:provider.stage}
+      Export:
+        Name: onboard-service-${self:provider.stage}-landlord-table
     
     # S3 bucket outputs
     TemplatesBucketName:

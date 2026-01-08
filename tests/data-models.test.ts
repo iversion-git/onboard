@@ -38,6 +38,7 @@ describe('Data Models', () => {
     process.env['DYNAMODB_PASSWORD_RESET_TOKENS_TABLE'] = 'onboard-password-reset-tokens-test';
     process.env['DYNAMODB_TENANTS_TABLE'] = 'onboard-tenants-test';
     process.env['DYNAMODB_CLUSTERS_TABLE'] = 'onboard-clusters-test';
+    process.env['DYNAMODB_LANDLORD_TABLE'] = 'landlord-test';
   });
 
   afterEach(() => {
@@ -629,6 +630,7 @@ describe('DynamoDB Access Patterns', () => {
     process.env['DYNAMODB_PASSWORD_RESET_TOKENS_TABLE'] = 'onboard-password-reset-tokens-test';
     process.env['DYNAMODB_TENANTS_TABLE'] = 'onboard-tenants-test';
     process.env['DYNAMODB_CLUSTERS_TABLE'] = 'onboard-clusters-test';
+    process.env['DYNAMODB_LANDLORD_TABLE'] = 'landlord-test';
     
     dynamoDBHelper = new DynamoDBHelper();
   });

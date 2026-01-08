@@ -15,6 +15,7 @@ const envSchema = z.object({
   DYNAMODB_SUBSCRIPTION_TYPES_TABLE: z.string().optional(),
   DYNAMODB_SUBSCRIPTIONS_TABLE: z.string().optional(),
   DYNAMODB_CLUSTERS_TABLE: z.string().optional(),
+  DYNAMODB_LANDLORD_TABLE: z.string().optional(),
   
   // JWT Configuration
   JWT_SECRET: z.string().min(32, 'JWT secret must be at least 32 characters long'),
@@ -66,6 +67,7 @@ export interface AppConfig {
     subscriptionTypesTable: string;
     subscriptionsTable: string;
     clustersTable: string;
+    landlordTable: string;
   };
   jwt: {
     secret: string;
@@ -134,6 +136,7 @@ export function loadConfig(): AppConfig {
         subscriptionTypesTable: env.DYNAMODB_SUBSCRIPTION_TYPES_TABLE || `onboard-subscription-types-${env.STAGE}`,
         subscriptionsTable: env.DYNAMODB_SUBSCRIPTIONS_TABLE || `onboard-subscriptions-${env.STAGE}`,
         clustersTable: env.DYNAMODB_CLUSTERS_TABLE || `onboard-clusters-${env.STAGE}`,
+        landlordTable: env.DYNAMODB_LANDLORD_TABLE || `landlord-${env.STAGE}`,
       },
       jwt: {
         secret: env.JWT_SECRET,

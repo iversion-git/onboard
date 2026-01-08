@@ -63,6 +63,25 @@ export interface SubscriptionTypeRecord {
   updated_at: string;
 }
 
+// Landlord Table Data Model (Global Table)
+export interface LandlordRecord {
+  id: string;                     // PK - Unique landlord identifier
+  name: string;                   // Landlord name
+  domain: string;                 // Domain name
+  database: string;               // Database name
+  dbusername: string;             // Database username
+  dbpassword: string;             // Database password (encrypted)
+  dburl: string;                  // Database connection URL
+  s3id: string;                   // S3 identifier
+  url: string;                    // Landlord URL
+  package_id: number;             // FK to packages table
+  industry_id: number;            // Industry identifier
+  environment: 'Production' | 'Staging' | 'Development';  // Environment type
+  outlets: number;                // Number of outlets
+  created_at: string;             // ISO timestamp
+  updated_at: string;             // ISO timestamp
+}
+
 // Subscriptions Table Data Model
 export interface SubscriptionRecord {
   subscription_id: string;        // PK
@@ -185,6 +204,24 @@ export const TenantRecordSchema = z.object({
   package_id: z.number().int().positive().optional(), // FK to packages table
   cluster_id: z.string().uuid(), // Required cluster ID for referential integrity
   cluster_name: z.string().min(1).max(255), // Required cluster name for display
+  created_at: z.string().datetime(),
+  updated_at: z.string().datetime(),
+});
+
+export const LandlordRecordSchema = z.object({
+  id: z.string().min(1).max(255),
+  name: z.string().min(1).max(255),
+  domain: z.string().min(1).max(255),
+  database: z.string().min(1).max(255),
+  dbusername: z.string().min(1).max(255),
+  dbpassword: z.string().min(1).max(255), // Should be encrypted
+  dburl: z.string().url(),
+  s3id: z.string().min(1).max(255),
+  url: z.string().url(),
+  package_id: z.number().int().positive(),
+  industry_id: z.number().int().positive(),
+  environment: z.enum(['Production', 'Staging', 'Development']),
+  outlets: z.number().int().min(0),
   created_at: z.string().datetime(),
   updated_at: z.string().datetime(),
 });
@@ -328,6 +365,10 @@ export const isPasswordResetToken = (obj: any): obj is PasswordResetToken => {
   return PasswordResetTokenSchema.safeParse(obj).success;
 };
 
+export const isLandlordRecord = (obj: any): obj is LandlordRecord => {
+  return LandlordRecordSchema.safeParse(obj).success;
+};
+
 export const isTenantRecord = (obj: any): obj is TenantRecord => {
   return TenantRecordSchema.safeParse(obj).success;
 };
@@ -343,6 +384,7 @@ export const isJWTPayload = (obj: any): obj is JWTPayload => {
 // Utility types for partial updates
 export type StaffUpdate = Partial<Pick<StaffRecord, 'roles' | 'enabled' | 'updated_at'>>;
 export type StaffPasswordUpdate = Partial<Pick<StaffRecord, 'password_hash' | 'updated_at'>>;
+export type LandlordUpdate = Partial<Pick<LandlordRecord, 'name' | 'domain' | 'database' | 'dbusername' | 'dbpassword' | 'dburl' | 's3id' | 'url' | 'package_id' | 'industry_id' | 'environment' | 'outlets' | 'updated_at'>>;
 export type TenantUpdate = Partial<Pick<TenantRecord, 'name' | 'email' | 'mobile_number' | 'business_name' | 'status' | 'deployment_type' | 'region' | 'tenant_url' | 'subscription_type' | 'package_name' | 'cluster_id' | 'cluster_name' | 'updated_at'>>;
 export type SubscriptionUpdate = Partial<Pick<SubscriptionRecord, 'subscription_name' | 'domain_name' | 'status' | 'deployment_id' | 'deployment_status' | 'stack_outputs' | 'deployed_at' | 'updated_at'>>;
 export type ClusterUpdate = Partial<Pick<ClusterRecord, 'name' | 'environment' | 'status' | 'deployment_status' | 'deployment_id' | 'stack_outputs' | 'deployed_at' | 'updated_at'>>;
@@ -358,6 +400,11 @@ export interface DatabaseOperationResult<T> {
 // Query result types
 export interface StaffQueryResult {
   staff?: StaffRecord;
+  found: boolean;
+}
+
+export interface LandlordQueryResult {
+  landlord?: LandlordRecord;
   found: boolean;
 }
 

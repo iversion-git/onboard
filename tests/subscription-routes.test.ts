@@ -15,6 +15,7 @@ process.env['DYNAMODB_PACKAGES_TABLE'] = 'onboard-packages-test';
 process.env['DYNAMODB_SUBSCRIPTION_TYPES_TABLE'] = 'onboard-subscription-types-test';
 process.env['DYNAMODB_SUBSCRIPTIONS_TABLE'] = 'onboard-subscriptions-test';
 process.env['DYNAMODB_CLUSTERS_TABLE'] = 'onboard-clusters-test';
+process.env['DYNAMODB_LANDLORD_TABLE'] = 'landlord-test';
 
 describe('Subscription Routes', () => {
   let router: ReturnType<typeof createRouterForEnvironment>;

@@ -13,6 +13,7 @@ process.env['DYNAMODB_PASSWORD_RESET_TOKENS_TABLE'] = 'onboard-password-reset-to
 process.env['DYNAMODB_TENANTS_TABLE'] = 'onboard-tenants-test';
 process.env['DYNAMODB_STACKS_TABLE'] = 'onboard-stacks-test';
 process.env['DYNAMODB_CLUSTERS_TABLE'] = 'onboard-clusters-test';
+process.env['DYNAMODB_LANDLORD_TABLE'] = 'landlord-test';
 
 describe('Stack Routes', () => {
   let router: ReturnType<typeof createRouterForEnvironment>;

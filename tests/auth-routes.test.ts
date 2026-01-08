@@ -13,6 +13,7 @@ beforeAll(() => {
   process.env['DYNAMODB_STAFF_TABLE'] = 'onboard-staff-test';
   process.env['DYNAMODB_PASSWORD_RESET_TOKENS_TABLE'] = 'onboard-password-reset-tokens-test';
   process.env['DYNAMODB_TENANTS_TABLE'] = 'onboard-tenants-test';
+  process.env['DYNAMODB_LANDLORD_TABLE'] = 'landlord-test';
   process.env['SES_FROM_EMAIL'] = 'test@example.com';
   process.env['APP_BASE_URL'] = 'https://test.example.com';
 });

@@ -9,9 +9,11 @@ import type {
   PackageRecord,
   SubscriptionTypeRecord,
   SubscriptionRecord,
+  LandlordRecord,
   ClusterRecord,
   StaffUpdate,
   TenantUpdate,
+  LandlordUpdate,
   SubscriptionUpdate,
   ClusterUpdate,
   DatabaseOperationResult,
@@ -20,6 +22,7 @@ import type {
   PackageQueryResult,
   SubscriptionTypeQueryResult,
   SubscriptionQueryResult,
+  LandlordQueryResult,
   ClusterQueryResult,
   PasswordResetTokenQueryResult,
   CIDRValidationResult
@@ -31,6 +34,7 @@ import {
   PackageRecordSchema,
   SubscriptionTypeRecordSchema,
   SubscriptionRecordSchema,
+  LandlordRecordSchema,
   ClusterRecordSchema
 } from './data-models.js';
 import { validateCIDRWithOverlapCheck } from './cidr-utils.js';
@@ -86,6 +90,7 @@ export const getTableNames = () => {
     subscriptionTypes: config.dynamodb.subscriptionTypesTable,
     subscriptions: config.dynamodb.subscriptionsTable,
     clusters: config.dynamodb.clustersTable,
+    landlord: config.dynamodb.landlordTable,
   };
 };
 
@@ -1460,6 +1465,197 @@ export class DynamoDBHelper {
   async deleteSubscription(subscriptionId: string, correlationId?: string): Promise<void> {
     return this.deleteItem(this.tables.subscriptions, { subscription_id: subscriptionId }, correlationId);
   }
+
+  // ============================================================================
+  // LANDLORD TABLE OPERATIONS (Global Table)
+  // ============================================================================
+
+  async getLandlord(landlordId: string, correlationId?: string): Promise<LandlordQueryResult> {
+    try {
+      logger.info('Getting landlord by ID', { 
+        landlordId, 
+        tableName: this.tables.landlord,
+        correlationId 
+      });
+
+      const item = await this.getItem(this.tables.landlord, { id: landlordId }, correlationId);
+      
+      if (!item) {
+        logger.info('Landlord not found', { 
+          landlordId, 
+          tableName: this.tables.landlord,
+          correlationId 
+        });
+        return { landlord: undefined, found: false };
+      }
+
+      // Validate the record format
+      const validationResult = LandlordRecordSchema.safeParse(item);
+      if (!validationResult.success) {
+        logger.error('Invalid landlord record format in database', { 
+          landlordId, 
+          errors: validationResult.error.issues,
+          correlationId 
+        });
+        throw createApiError('InternalError', 'Invalid landlord record format');
+      }
+
+      return { landlord: validationResult.data, found: true };
+    } catch (error) {
+      logger.error('Failed to get landlord', { 
+        landlordId, 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        correlationId 
+      });
+      throw error;
+    }
+  }
+
+  async createLandlord(landlordData: Omit<LandlordRecord, 'created_at' | 'updated_at'>, correlationId?: string): Promise<DatabaseOperationResult<LandlordRecord>> {
+    try {
+      const now = new Date().toISOString();
+      const landlordRecord: LandlordRecord = {
+        ...landlordData,
+        created_at: now,
+        updated_at: now,
+      };
+
+      // Validate the record before saving
+      const validationResult = LandlordRecordSchema.safeParse(landlordRecord);
+      if (!validationResult.success) {
+        logger.error('Invalid landlord record data', { 
+          errors: validationResult.error.issues,
+          correlationId 
+        });
+        throw createApiError('ValidationError', 'Invalid landlord record data');
+      }
+
+      await this.putItem(this.tables.landlord, validationResult.data, correlationId);
+      
+      return { 
+        success: true, 
+        data: validationResult.data,
+        correlationId 
+      };
+    } catch (error) {
+      logger.error('Failed to create landlord', { 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        correlationId 
+      });
+      throw error;
+    }
+  }
+
+  async updateLandlord(landlordId: string, updates: LandlordUpdate, correlationId?: string): Promise<DatabaseOperationResult<LandlordRecord>> {
+    try {
+      // Add updated_at timestamp
+      const updatesWithTimestamp = {
+        ...updates,
+        updated_at: new Date().toISOString(),
+      };
+
+      const updateExpression = 'SET ' + Object.keys(updatesWithTimestamp).map((key, index) => `#${key} = :val${index}`).join(', ');
+      const expressionAttributeNames = Object.keys(updatesWithTimestamp).reduce((acc, key) => {
+        acc[`#${key}`] = key;
+        return acc;
+      }, {} as Record<string, string>);
+      const expressionAttributeValues = Object.keys(updatesWithTimestamp).reduce((acc, key, index) => {
+        acc[`:val${index}`] = updatesWithTimestamp[key as keyof typeof updatesWithTimestamp];
+        return acc;
+      }, {} as Record<string, any>);
+
+      const updateCommand = new UpdateCommand({
+        TableName: this.tables.landlord,
+        Key: { id: landlordId },
+        UpdateExpression: updateExpression,
+        ExpressionAttributeNames: expressionAttributeNames,
+        ExpressionAttributeValues: expressionAttributeValues,
+        ReturnValues: 'ALL_NEW',
+      });
+
+      const result = await this.client.send(updateCommand);
+      
+      if (!result.Attributes) {
+        throw createApiError('NotFound', 'Landlord not found');
+      }
+
+      // Validate the updated record
+      const validationResult = LandlordRecordSchema.safeParse(result.Attributes);
+      if (!validationResult.success) {
+        logger.error('Invalid updated landlord record format', { 
+          landlordId,
+          errors: validationResult.error.issues,
+          correlationId 
+        });
+        throw createApiError('InternalError', 'Invalid updated landlord record format');
+      }
+
+      return { 
+        success: true, 
+        data: validationResult.data,
+        correlationId 
+      };
+    } catch (error) {
+      logger.error('Failed to update landlord', { 
+        landlordId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        correlationId 
+      });
+      throw error;
+    }
+  }
+
+  async deleteLandlord(landlordId: string, correlationId?: string): Promise<void> {
+    return this.deleteItem(this.tables.landlord, { id: landlordId }, correlationId);
+  }
+
+  async getAllLandlords(correlationId?: string): Promise<LandlordRecord[]> {
+    try {
+      logger.info('Getting all landlords', { 
+        tableName: this.tables.landlord,
+        correlationId 
+      });
+
+      const scanCommand = new ScanCommand({
+        TableName: this.tables.landlord,
+      });
+
+      const result = await this.client.send(scanCommand);
+      
+      logger.info('DynamoDB Scan for landlords completed', { 
+        tableName: this.tables.landlord,
+        itemCount: result.Items?.length || 0,
+        correlationId 
+      });
+
+      if (!result.Items) {
+        return [];
+      }
+
+      // Validate all records
+      const validatedRecords: LandlordRecord[] = [];
+      for (const item of result.Items) {
+        const validationResult = LandlordRecordSchema.safeParse(item);
+        if (validationResult.success) {
+          validatedRecords.push(validationResult.data);
+        } else {
+          logger.warn('Skipping invalid landlord record', { 
+            item,
+            errors: validationResult.error.issues,
+            correlationId 
+          });
+        }
+      }
+
+      return validatedRecords;
+    } catch (error) {
+      logger.error('Failed to get all landlords', { 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        correlationId 
+      });
+      throw error;
+    }
+  }
 }
 
 // Export singleton instance (lazy initialization)
@@ -1553,4 +1749,16 @@ export const dynamoDBHelper = {
     dynamoDBHelper.instance.updateSubscription(subscriptionId, updates, correlationId),
   deleteSubscription: (subscriptionId: string, correlationId?: string) => 
     dynamoDBHelper.instance.deleteSubscription(subscriptionId, correlationId),
+
+  // Landlord methods (Global Table)
+  getLandlord: (landlordId: string, correlationId?: string) => 
+    dynamoDBHelper.instance.getLandlord(landlordId, correlationId),
+  getAllLandlords: (correlationId?: string) => 
+    dynamoDBHelper.instance.getAllLandlords(correlationId),
+  createLandlord: (landlordData: Omit<LandlordRecord, 'created_at' | 'updated_at'>, correlationId?: string) => 
+    dynamoDBHelper.instance.createLandlord(landlordData, correlationId),
+  updateLandlord: (landlordId: string, updates: LandlordUpdate, correlationId?: string) => 
+    dynamoDBHelper.instance.updateLandlord(landlordId, updates, correlationId),
+  deleteLandlord: (landlordId: string, correlationId?: string) => 
+    dynamoDBHelper.instance.deleteLandlord(landlordId, correlationId),
 };

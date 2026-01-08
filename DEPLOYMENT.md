@@ -147,6 +147,7 @@ All tables use onboard-service naming convention:
 - `onboard-subscription-types-${stage}`: Subscription type definitions
 - `onboard-subscriptions-${stage}`: Subscription records
 - `onboard-clusters-${stage}`: Cluster infrastructure records
+- `landlord-${stage}`: **Global Table** - Landlord data replicated across multiple regions
 
 ## Monitoring and Observability
 
@@ -227,6 +228,7 @@ After successful deployment, you'll receive:
 - **Packages Table**: `onboard-packages-${stage}`
 - **Subscription Types Table**: `onboard-subscription-types-${stage}`
 - **Subscriptions Table**: `onboard-subscriptions-${stage}`
+- **Landlord Global Table**: `landlord-${stage}` (replicated in ap-southeast-2, us-east-1, eu-central-1, eu-west-2)
 - **Password Reset Tokens Table**: `PasswordResetTokens-${stage}`
 - **Tenants Table**: `Tenants-${stage}`
 
