@@ -282,10 +282,10 @@ Error responses:
   "business_name": "Acme Corporation",         // ✅ Required - Business or company name (1-255 characters)
   "deployment_type": "Shared",                 // ✅ Required - "Shared" or "Dedicated"
   "region": "Australia",                       // ✅ Required - "Australia", "US", "UK", or "Europe"
-  "tenant_url": "acme123",                     // ✅ Required - Tenant subdomain (1-50 chars, lowercase letters and numbers only)
+  "tenant_url": "acme-corp",                     // ✅ Required - Tenant subdomain (1-50 chars, lowercase letters, numbers, and hyphens only)
   "subscription_type": "General",              // ✅ Required - "General", "Made to Measure", "Automotive", or "Rental"
   "package_name": "Professional",              // ✅ Required - "Essential", "Professional", "Premium", or "Enterprise"
-  "cluster_id": "550e8400-e29b-41d4-a716-446655440004"  // ❌ Optional - Specific cluster ID to assign tenant to
+  "cluster_id": "550e8400-e29b-41d4-a716-446655440004"  // ✅ Required - Specific cluster ID to assign tenant to
 }
 ```
 
@@ -302,10 +302,11 @@ Error responses:
     "status": "Pending",
     "deployment_type": "Shared",
     "region": "Australia",
-    "tenant_url": "acme123",
+    "tenant_url": "acme-corp",
     "subscription_type": "General",
     "package_name": "Professional",
     "cluster_id": "550e8400-e29b-41d4-a716-446655440004",
+    "cluster_name": "Shared Production Cluster AU",
     "created_at": "2025-01-07T05:00:00.000Z",
     "updated_at": "2025-01-07T05:00:00.000Z"
   },
@@ -321,10 +322,11 @@ Error responses:
 - `status`: Automatically set to "Pending" on creation
 - `deployment_type`: Infrastructure deployment preference
 - `region`: Preferred geographic region for deployment
-- `tenant_url`: Unique subdomain identifier (e.g., "acme123" becomes "acme123.myapp.com")
+- `tenant_url`: Unique subdomain identifier (e.g., "acme-corp" becomes "acme-corp.myapp.com")
 - `subscription_type`: Type of subscription service
 - `package_name`: Service package level
-- `cluster_id`: Optional specific cluster assignment (must match deployment type)
+- `cluster_id`: Required specific cluster assignment (must match deployment type and be active)
+- `cluster_name`: Display name of the assigned cluster (automatically populated from cluster_id)
 
 **Status Values**:
 - `Pending`: Newly created, awaiting provisioning
@@ -344,17 +346,28 @@ Error responses:
 - `Premium`: Advanced features for established businesses
 - `Enterprise`: Full feature set for large organizations
 
+**Tenant URL Validation Rules**:
+- Only lowercase letters (a-z), numbers (0-9), and hyphens (-) allowed
+- Cannot start or end with a hyphen
+- Cannot contain consecutive hyphens (no --)
+- Must be 1-50 characters long
+- Must be unique across all tenants
+- Examples:
+  - ✅ Valid: `acme-corp`, `tenant123`, `my-company`, `test-env-1`
+  - ❌ Invalid: `Acme-Corp` (uppercase), `-acme` (starts with hyphen), `acme-` (ends with hyphen), `acme--corp` (consecutive hyphens), `acme_corp` (underscore), `acme.corp` (dot)
+
 **Cluster Assignment**:
-- If `cluster_id` is provided, the cluster must exist, be active, and match the tenant's deployment type
-- Shared tenants can only be assigned to shared clusters
-- Dedicated tenants can only be assigned to dedicated clusters
-- If not provided, cluster assignment can be done later during provisioning
+- `cluster_id` is required for all tenant registrations
+- The cluster must exist, be active, and match the tenant's deployment type
+- Shared tenants must be assigned to shared clusters
+- Dedicated tenants must be assigned to dedicated clusters
+- Use the `/tenant/available-clusters` endpoint to get valid cluster options
 
 **Error Responses**:
 - `401 Unauthorized` - Missing or invalid JWT token
 - `403 Forbidden` - Insufficient permissions (not admin or manager)
 - `409 Conflict` - Tenant URL is already taken
-- `400 ValidationError` - Invalid field values, format, or cluster assignment
+- `400 ValidationError` - Invalid field values, format, missing cluster_id, or invalid cluster assignment
 
 ---
 
@@ -471,6 +484,262 @@ GET /tenant/available-clusters?deployment_type=Shared
 - Configured for cross-origin requests
 - Supports all standard HTTP methods
 - Allows Authorization and Content-Type headers
+
+---
+
+## Subscription Management Endpoints
+
+### POST /subscription/create
+**Description**: Create a new subscription for a tenant
+
+**Authentication**: ✅ Required (Admin or Manager only)
+
+**Request Body**:
+```json
+{
+  "tenant_id": "550e8400-e29b-41d4-a716-446655440003",  // ✅ Required - Tenant ID to create subscription for
+  "subscription_type_level": "Production",               // ✅ Required - "Production" or "Dev"
+  "domain_name": "https://mywebsite.com"                 // ✅ Required - Custom domain name
+}
+```
+
+**Success Response (201)**:
+```json
+{
+  "success": true,
+  "data": {
+    "subscription_id": "550e8400-e29b-41d4-a716-446655440005",
+    "tenant_id": "550e8400-e29b-41d4-a716-446655440003",
+    "subscription_name": "tenant1-prod",
+    "subscription_type_level": "Production",
+    "tenant_url": "tenant1.flowrix.app",
+    "tenant_api_url": "tenant1.flowrix.app",
+    "domain_name": "https://mywebsite.com",
+    "region": "dedicated",
+    "deployment_type": "Dedicated",
+    "subscription_type_id": 1,
+    "subscription_type_name": "General",
+    "package_id": 2,
+    "package_name": "Professional",
+    "cluster_id": "550e8400-e29b-41d4-a716-446655440004",
+    "cluster_name": "Dedicated Production Cluster",
+    "status": "Pending",
+    "created_at": "2025-01-07T05:00:00.000Z",
+    "updated_at": "2025-01-07T05:00:00.000Z"
+  },
+  "timestamp": "2025-01-07T05:00:00.000Z"
+}
+```
+
+**Field Descriptions**:
+- `subscription_id`: Unique identifier for the subscription
+- `tenant_id`: ID of the tenant this subscription belongs to
+- `subscription_name`: Auto-generated name based on tenant URL and type (e.g., "acme-corp-prod", "acme-corp-dev", "acme-corp-dev-2")
+- `subscription_type_level`: Type of subscription (Production or Dev)
+- `tenant_url`: Generated tenant URL (e.g., "acme-corp.flowrix.app")
+- `tenant_api_url`: Generated API URL based on deployment type and region
+- `domain_name`: Custom domain name provided by user (e.g., "https://mywebsite.com")
+- `region`: AWS region code (ap-southeast-2, us-east-1, eu-west-2, eu-central-1) or "dedicated" for dedicated deployments
+- `deployment_type`: Copied from tenant (Shared or Dedicated)
+- `subscription_type_id`: Numeric ID referencing the subscription_types table
+- `subscription_type_name`: Name fetched from subscription_types table (e.g., "General", "Made to Measure", "Automotive", "Rental")
+- `package_id`: Numeric ID referencing the packages table
+- `package_name`: Name fetched from packages table (e.g., "Essential", "Professional", "Premium", "Enterprise")
+- `cluster_id`: Cluster ID copied from tenant
+- `cluster_name`: Cluster name copied from tenant
+- `status`: Current subscription status (Pending, Deploying, Active, Failed, Terminated)
+
+**URL Generation Rules**:
+- **Production Tenant URL**: `{tenant_url}.flowrix.app` (e.g., `tenant1.flowrix.app`)
+- **Dev Tenant URL**: `{tenant_url}-dev-{random2digits}.flowrix.app` (e.g., `tenant1-dev-22.flowrix.app`)
+- **Production API URL for Dedicated**: `{tenant_url}.flowrix.app` (e.g., `tenant1.flowrix.app`)
+- **Dev API URL for Dedicated**: `{tenant_url}-dev-{random2digits}.flowrix.app` (e.g., `tenant1-dev-22.flowrix.app`)
+- **Production API URL for Shared**: `{tenant_url}.{region}.flowrix.app` (e.g., `tenant1.au.flowrix.app`)
+- **Dev API URL for Shared**: `{tenant_url}-dev-{random2digits}.{region}.flowrix.app` (e.g., `tenant1-dev-22.au.flowrix.app`)
+
+**Region Mapping**:
+- **Australia** → `ap-southeast-2`
+- **US** → `us-east-1`
+- **UK** → `eu-west-2`
+- **Europe** → `eu-central-1`
+- **Dedicated deployments** → `dedicated` (regardless of display region)
+
+**Subscription Type ID Mapping** (Dynamic from `subscription_types` table):
+- **General** → `1`
+- **Made to Measure** → `2`
+- **Automotive** → `3`
+- **Rental** → `4`
+- *Additional types can be added to the table*
+
+**Package ID Mapping** (Dynamic from `packages` table):
+- **Essential** → `1`
+- **Professional** → `2`
+- **Premium** → `3`
+- **Enterprise** → `4`
+- *Additional packages can be added to the table*
+
+**Business Rules**:
+- Each tenant can have only one Production subscription (named `{tenant_url}-prod`)
+- Each tenant can have multiple Dev subscriptions (named `{tenant_url}-dev-{random2digits}`)
+- Subscription names are automatically generated based on tenant URL and type
+- Dev subscriptions use random 2-digit suffixes (10-99) for uniqueness
+- All tenant information (region, deployment type, subscription, package, cluster) is copied to the subscription
+- Tenant must exist and be in Active or Pending status
+- URLs are automatically generated based on tenant's deployment type, region, and subscription type
+
+**Error Responses**:
+- `401 Unauthorized` - Missing or invalid JWT token
+- `403 Forbidden` - Insufficient permissions (not admin or manager)
+- `400 ValidationError` - Invalid field values, tenant not found, tenant missing required fields, or tenant not in valid status
+- `409 Conflict` - Tenant already has a production subscription (when creating Production type)
+
+---
+
+### GET /subscription/list
+**Description**: List all subscriptions for a specific tenant
+
+**Authentication**: ✅ Required (Admin or Manager only)
+
+**Query Parameters**:
+- `tenant_id` (required): UUID of the tenant to list subscriptions for
+
+**Example Request**:
+```
+GET /subscription/list?tenant_id=550e8400-e29b-41d4-a716-446655440003
+```
+
+**Success Response (200)**:
+```json
+{
+  "success": true,
+  "data": {
+    "tenant_id": "550e8400-e29b-41d4-a716-446655440003",
+    "tenant_name": "Acme Corporation",
+    "subscriptions": [
+      {
+        "subscription_id": "550e8400-e29b-41d4-a716-446655440005",
+        "subscription_name": "acme-corp-prod",
+        "subscription_type_level": "Production",
+        "tenant_url": "acme-corp.flowrix.app",
+        "tenant_api_url": "acme-corp.flowrix.app",
+        "domain_name": "https://mywebsite.com",
+        "region": "dedicated",
+        "deployment_type": "Dedicated",
+        "subscription_type_id": 1,
+        "subscription_type_name": "General",
+        "package_id": 2,
+        "package_name": "Professional",
+        "cluster_id": "550e8400-e29b-41d4-a716-446655440004",
+        "cluster_name": "Dedicated Production Cluster",
+        "status": "Active",
+        "deployment_id": "arn:aws:cloudformation:us-east-1:123456789012:stack/acme-prod/12345678",
+        "deployment_status": "CREATE_COMPLETE",
+        "created_at": "2025-01-07T05:00:00.000Z",
+        "updated_at": "2025-01-07T06:00:00.000Z",
+        "deployed_at": "2025-01-07T06:00:00.000Z"
+      },
+      {
+        "subscription_id": "550e8400-e29b-41d4-a716-446655440006",
+        "subscription_name": "acme-corp-dev-22",
+        "subscription_type_level": "Dev",
+        "tenant_url": "acme-corp-dev-22.flowrix.app",
+        "tenant_api_url": "acme-corp-dev-22.flowrix.app",
+        "domain_name": "https://dev.mywebsite.com",
+        "region": "dedicated",
+        "deployment_type": "Dedicated",
+        "subscription_type_id": 1,
+        "subscription_type_name": "General",
+        "package_id": 2,
+        "package_name": "Professional",
+        "cluster_id": "550e8400-e29b-41d4-a716-446655440004",
+        "cluster_name": "Dedicated Production Cluster",
+        "status": "Pending",
+        "deployment_id": null,
+        "deployment_status": null,
+        "created_at": "2025-01-07T07:00:00.000Z",
+        "updated_at": "2025-01-07T07:00:00.000Z",
+        "deployed_at": null
+      }
+    ]
+  },
+  "timestamp": "2025-01-07T08:00:00.000Z"
+}
+```
+
+**Error Responses**:
+- `401 Unauthorized` - Missing or invalid JWT token
+- `403 Forbidden` - Insufficient permissions (not admin or manager)
+- `400 ValidationError` - Invalid tenant_id or tenant not found
+
+---
+
+### GET /subscription/:subscriptionId
+**Description**: Get detailed information about a specific subscription
+
+**Authentication**: ✅ Required (Admin or Manager only)
+
+**Path Parameters**:
+- `subscriptionId` (required): UUID of the subscription to retrieve
+
+**Example Request**:
+```
+GET /subscription/550e8400-e29b-41d4-a716-446655440005
+```
+
+**Success Response (200)**:
+```json
+{
+  "success": true,
+  "data": {
+    "subscription_id": "550e8400-e29b-41d4-a716-446655440005",
+    "tenant_id": "550e8400-e29b-41d4-a716-446655440003",
+    "tenant_name": "Acme Corporation",
+    "subscription_name": "acme-corp-prod",
+    "subscription_type_level": "Production",
+    "tenant_url": "acme-corp.flowrix.app",
+    "tenant_api_url": "acme-corp.flowrix.app",
+    "domain_name": "https://mywebsite.com",
+    "region": "dedicated",
+    "deployment_type": "Dedicated",
+    "subscription_type_id": 1,
+    "subscription_type_name": "General",
+    "package_id": 2,
+    "package_name": "Professional",
+    "cluster_id": "550e8400-e29b-41d4-a716-446655440004",
+    "cluster_name": "Dedicated Production Cluster",
+    "status": "Active",
+    "deployment_id": "arn:aws:cloudformation:us-east-1:123456789012:stack/acme-prod/12345678",
+    "deployment_status": "CREATE_COMPLETE",
+    "stack_outputs": {
+      "ApiGatewayUrl": "https://api.acme-corp.flowrix.app",
+      "DatabaseEndpoint": "acme-prod-db.cluster-xyz.us-east-1.rds.amazonaws.com",
+      "S3BucketName": "acme-prod-storage-bucket"
+    },
+    "created_at": "2025-01-07T05:00:00.000Z",
+    "updated_at": "2025-01-07T06:00:00.000Z",
+    "deployed_at": "2025-01-07T06:00:00.000Z"
+  },
+  "timestamp": "2025-01-07T08:00:00.000Z"
+}
+```
+
+**Field Descriptions**:
+- `deployment_id`: CloudFormation stack ARN (null if not deployed)
+- `deployment_status`: CloudFormation stack status (null if not deployed)
+- `stack_outputs`: CloudFormation stack outputs (null if not deployed)
+- `deployed_at`: Timestamp when deployment completed (null if not deployed)
+
+**Subscription Status Values**:
+- `Pending`: Newly created, awaiting deployment
+- `Deploying`: Currently being deployed via CloudFormation
+- `Active`: Successfully deployed and operational
+- `Failed`: Deployment failed
+- `Terminated`: Subscription has been terminated/deleted
+
+**Error Responses**:
+- `401 Unauthorized` - Missing or invalid JWT token
+- `403 Forbidden` - Insufficient permissions (not admin or manager)
+- `404 NotFound` - Subscription not found
 
 ---
 

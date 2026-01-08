@@ -4,6 +4,7 @@ import { createRouterForEnvironment } from './lib/setup.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerStaffRoutes } from './routes/staff.js';
 import { registerTenantRoutes } from './routes/tenant.js';
+import { registerSubscriptionRoutes } from './routes/subscription.js';
 import { registerClusterRoutes } from './routes/cluster.js';
 import { logger } from './lib/logging.js';
 
@@ -26,6 +27,7 @@ function initializeRouter() {
     registerAuthRoutes(router);
     registerStaffRoutes(router);
     registerTenantRoutes(router);
+    registerSubscriptionRoutes(router);
     registerClusterRoutes(router);
 
     logger.info('Router initialized successfully with all routes registered');

@@ -11,6 +11,9 @@ const envSchema = z.object({
   DYNAMODB_STAFF_TABLE: z.string().optional(),
   DYNAMODB_PASSWORD_RESET_TOKENS_TABLE: z.string().optional(),
   DYNAMODB_TENANTS_TABLE: z.string().optional(),
+  DYNAMODB_PACKAGES_TABLE: z.string().optional(),
+  DYNAMODB_SUBSCRIPTION_TYPES_TABLE: z.string().optional(),
+  DYNAMODB_SUBSCRIPTIONS_TABLE: z.string().optional(),
   DYNAMODB_CLUSTERS_TABLE: z.string().optional(),
   
   // JWT Configuration
@@ -59,6 +62,9 @@ export interface AppConfig {
     staffTable: string;
     passwordResetTokensTable: string;
     tenantsTable: string;
+    packagesTable: string;
+    subscriptionTypesTable: string;
+    subscriptionsTable: string;
     clustersTable: string;
   };
   jwt: {
@@ -124,6 +130,9 @@ export function loadConfig(): AppConfig {
         staffTable: env.DYNAMODB_STAFF_TABLE || `Staff-${env.STAGE}`,
         passwordResetTokensTable: env.DYNAMODB_PASSWORD_RESET_TOKENS_TABLE || `PasswordResetTokens-${env.STAGE}`,
         tenantsTable: env.DYNAMODB_TENANTS_TABLE || `Tenants-${env.STAGE}`,
+        packagesTable: env.DYNAMODB_PACKAGES_TABLE || `Packages-${env.STAGE}`,
+        subscriptionTypesTable: env.DYNAMODB_SUBSCRIPTION_TYPES_TABLE || `SubscriptionTypes-${env.STAGE}`,
+        subscriptionsTable: env.DYNAMODB_SUBSCRIPTIONS_TABLE || `Subscriptions-${env.STAGE}`,
         clustersTable: env.DYNAMODB_CLUSTERS_TABLE || `Clusters-${env.STAGE}`,
       },
       jwt: {
