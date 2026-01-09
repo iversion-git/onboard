@@ -9,10 +9,25 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import fs from 'fs';
 import path from 'path';
 
-// Configuration
+// Configuration - Dynamic bucket name resolution
 const REGION = process.env.AWS_REGION || 'ap-southeast-2';
 const STAGE = process.env.STAGE || 'dev';
-const BUCKET_NAME = `aws-lambda-control-plane-templates-${STAGE}`;
+
+// Function to get bucket name dynamically
+function getBucketName() {
+  // Priority 1: Environment variable (set by serverless deployment)
+  if (process.env.S3_TEMPLATE_BUCKET) {
+    console.log(`📍 Using bucket from environment: ${process.env.S3_TEMPLATE_BUCKET}`);
+    return process.env.S3_TEMPLATE_BUCKET;
+  }
+  
+  // Priority 2: Service name + stage (matches serverless.yml pattern)
+  const bucketName = `onboard-templates-${STAGE}`;
+  console.log(`📍 Using default bucket pattern: ${bucketName}`);
+  return bucketName;
+}
+
+const BUCKET_NAME = getBucketName();
 
 // Template files to upload
 const TEMPLATES = [

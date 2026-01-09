@@ -42,7 +42,7 @@ export interface PasswordResetEmailData {
 // Email templates
 export const emailTemplates = {
   passwordReset: (data: PasswordResetEmailData): EmailTemplate => ({
-    subject: 'Password Reset Request - AWS Lambda Control Plane',
+    subject: 'Password Reset Request - Onboard Service',
     htmlBody: `
       <!DOCTYPE html>
       <html>
@@ -67,7 +67,7 @@ export const emailTemplates = {
         <div class="content">
           <p>Hello ${data.recipientName},</p>
           
-          <p>We received a request to reset your password for your AWS Lambda Control Plane account. If you made this request, please click the button below to reset your password:</p>
+          <p>We received a request to reset your password for your Onboard Service account. If you made this request, please click the button below to reset your password:</p>
           
           <a href="${data.resetUrl}" class="button">Reset Password</a>
           
@@ -84,18 +84,18 @@ export const emailTemplates = {
         </div>
         
         <div class="footer">
-          <p>This is an automated message from AWS Lambda Control Plane. Please do not reply to this email.</p>
+          <p>This is an automated message from Onboard Service. Please do not reply to this email.</p>
           <p>If you continue to have problems, please contact your system administrator.</p>
         </div>
       </body>
       </html>
     `,
     textBody: `
-Password Reset Request - AWS Lambda Control Plane
+Password Reset Request - Onboard Service
 
 Hello ${data.recipientName},
 
-We received a request to reset your password for your AWS Lambda Control Plane account. If you made this request, please use the following link to reset your password:
+We received a request to reset your password for your Onboard Service account. If you made this request, please use the following link to reset your password:
 
 ${data.resetUrl}
 
@@ -105,7 +105,7 @@ If you did not request a password reset, please ignore this email. Your password
 
 For security reasons, please do not share this email or the reset link with anyone.
 
-This is an automated message from AWS Lambda Control Plane. Please do not reply to this email.
+This is an automated message from Onboard Service. Please do not reply to this email.
 If you continue to have problems, please contact your system administrator.
     `.trim(),
   }),

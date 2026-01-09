@@ -17,7 +17,12 @@ custom:
     
     # Security Configuration - CHANGE THESE!
     jwtSecret: r2P19YQ0kv59MUGL5Ppi9pvGnmmaerxpBox5i0PRpBNd3J1IKptaphEIf7Lbe9BI  # Generate new: node scripts/generate-jwt-secret.js
-    sesFromEmail: noreply@example.com
+    
+    # SES Configuration by Stage
+    sesFromEmail:
+      dev: onboard-dev@flowrix.app     # Development environment sender
+      staging: onboard-staging@flowrix.app  # Staging environment sender  
+      prod: onboard@flowrix.app        # Production environment sender
     
     # Performance Configuration
     lambdaMemory: 1024
@@ -117,8 +122,8 @@ provider:
     DYNAMODB_LANDLORD_TABLE: landlord-${self:provider.stage}
     # JWT secret from config (Requirements 9.6)
     JWT_SECRET: ${self:custom.config.jwtSecret}
-    # SES configuration from config
-    SES_FROM_EMAIL: ${self:custom.config.sesFromEmail}
+    # SES configuration from config (stage-specific)
+    SES_FROM_EMAIL: ${self:custom.config.sesFromEmail.${self:provider.stage}}
     # CORS origins for environment-specific configuration (Requirements 9.5)
     CORS_ORIGINS: ${self:custom.config.corsOrigins.${self:provider.stage}}
     # Security configuration
@@ -138,28 +143,9 @@ provider:
   tracing:
     lambda: true
     apiGateway: true
-  httpApi:
-    # HTTP API Gateway configuration for single function (Requirements 8.4)
-    name: onboard-api-${self:provider.stage}
-    cors:
-      allowedOrigins:
-        - ${self:custom.config.corsOrigins.${self:provider.stage}}
-      allowedHeaders:
-        - Content-Type
-        - Authorization
-        - X-Amz-Date
-        - X-Api-Key
-        - X-Amz-Security-Token
-        - X-Amz-User-Agent
-        - X-Correlation-ID
-      allowedMethods:
-        - GET
-        - POST
-        - PUT
-        - DELETE
-        - OPTIONS
-      allowCredentials: false
-      maxAge: 86400
+  apiGateway:
+    # Use v1 as API stage regardless of deployment stage
+    stage: v1
 
 # ============================================================================
 # ============================================================================
@@ -173,12 +159,34 @@ functions:
     description: "Single Lambda function handling all API endpoints with internal routing"
     # API Gateway proxy integration with /{proxy+} routing (Requirements 8.4)
     events:
-      - httpApi:
+      - http:
           path: /{proxy+}
           method: ANY
-      - httpApi:
+          cors:
+            origin: ${self:custom.config.corsOrigins.${self:provider.stage}}
+            headers:
+              - Content-Type
+              - Authorization
+              - X-Amz-Date
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+              - X-Correlation-ID
+            allowCredentials: false
+      - http:
           path: /
           method: ANY
+          cors:
+            origin: ${self:custom.config.corsOrigins.${self:provider.stage}}
+            headers:
+              - Content-Type
+              - Authorization
+              - X-Amz-Date
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+              - X-Correlation-ID
+            allowCredentials: false
     environment:
       # Function-specific environment variables
       FUNCTION_NAME: onboard-api-${self:provider.stage}
@@ -535,6 +543,8 @@ resources:
         Dimensions:
           - Name: ApiName
             Value: onboard-api-${self:provider.stage}
+          - Name: Stage
+            Value: ${self:provider.stage}
         TreatMissingData: notBreaching
 
     # API Gateway 5xx Error Alarm
@@ -553,30 +563,11 @@ resources:
         Dimensions:
           - Name: ApiName
             Value: onboard-api-${self:provider.stage}
+          - Name: Stage
+            Value: ${self:provider.stage}
         TreatMissingData: notBreaching
 
   Outputs:
-    # API Gateway outputs
-    ApiUrl:
-      Description: HTTP API Gateway URL for single function
-      Value:
-        Fn::Join:
-          - ''
-          - - 'https://'
-            - Ref: HttpApi
-            - '.execute-api.'
-            - ${self:provider.region}
-            - '.amazonaws.com'
-      Export:
-        Name: onboard-service-${self:provider.stage}-api-url
-    
-    ApiId:
-      Description: HTTP API Gateway ID
-      Value:
-        Ref: HttpApi
-      Export:
-        Name: onboard-service-${self:provider.stage}-api-id
-    
     # Lambda function outputs
     LambdaFunctionName:
       Description: Single Lambda function name

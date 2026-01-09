@@ -67,13 +67,14 @@ export interface SubscriptionTypeRecord {
 export interface LandlordRecord {
   id: string;                     // PK - Unique landlord identifier
   name: string;                   // Landlord name
-  domain: string;                 // Domain name
+  domain: string;                 // Generated tenant URL without https:// (e.g., "acme-corp-prod.shared.au.myapp.com")
   database: string;               // Database name
   dbusername: string;             // Database username
   dbpassword: string;             // Database password (encrypted)
-  dburl: string;                  // Database connection URL
+  dburl: string;                  // Database hostname only
   s3id: string;                   // S3 identifier
-  url: string;                    // Landlord URL
+  url: string;                    // Full URL of domain supplied during subscription creation (e.g., "https://acme-corp.com")
+  api_url: string;                // Generated tenant API URL without https:// (e.g., "tenant1.au.flowrix.app")
   package_id: number;             // FK to packages table
   industry_id: number;            // Industry identifier
   environment: 'Production' | 'Staging' | 'Development';  // Environment type
@@ -201,10 +202,6 @@ export const TenantRecordSchema = z.object({
     (url) => !url.includes('--'),
     'Tenant URL cannot contain consecutive hyphens'
   ),
-  subscription_type_id: z.number().int().positive().optional(), // FK to subscription_types table
-  package_id: z.number().int().positive().optional(), // FK to packages table
-  cluster_id: z.string().uuid(), // Required cluster ID for referential integrity
-  cluster_name: z.string().min(1).max(255), // Required cluster name for display
   created_at: z.string().datetime(),
   updated_at: z.string().datetime(),
 });
@@ -212,13 +209,14 @@ export const TenantRecordSchema = z.object({
 export const LandlordRecordSchema = z.object({
   id: z.string().min(1).max(255),
   name: z.string().min(1).max(255),
-  domain: z.string().min(1).max(255),
+  domain: z.string().min(1).max(255), // Generated tenant URL without https:// (e.g., "acme-corp-prod.shared.au.myapp.com")
   database: z.string().min(1).max(255),
   dbusername: z.string().min(1).max(255),
   dbpassword: z.string().min(1).max(255), // Should be encrypted
-  dburl: z.string().url(),
+  dburl: z.string().min(1).max(255), // Just the database hostname (e.g., "prod-db-01-instance-1.cabaivmklndo.ap-southeast-2.rds.amazonaws.com")
   s3id: z.string().min(1).max(255),
-  url: z.string().url(),
+  url: z.string().url(), // Full URL of the domain supplied during subscription creation (e.g., "https://acme-corp.com")
+  api_url: z.string().min(1).max(255), // Generated tenant API URL without https:// (e.g., "tenant1.au.flowrix.app")
   package_id: z.number().int().positive(),
   industry_id: z.number().int().positive(),
   environment: z.enum(['Production', 'Staging', 'Development']),
@@ -230,7 +228,7 @@ export const LandlordRecordSchema = z.object({
 export const SubscriptionRecordSchema = z.object({
   subscription_id: z.string().uuid(),
   tenant_id: z.string().uuid(),
-  subscription_name: z.string().min(1).max(255),
+  tenant_name: z.string().min(1).max(255), // Business name from tenant table
   subscription_type_level: z.enum(['Production', 'Dev']),
   tenant_url: z.string().min(1).max(255),
   tenant_api_url: z.string().min(1).max(255),
@@ -240,8 +238,10 @@ export const SubscriptionRecordSchema = z.object({
   deployment_type: z.enum(['Shared', 'Dedicated']),
   subscription_type_id: z.number().int().positive(), // FK to subscription_types table
   package_id: z.number().int().positive(), // FK to packages table
-  cluster_id: z.string().uuid(),
-  cluster_name: z.string().min(1).max(255),
+  cluster_id: z.string().uuid(), // Reference to cluster for DB/resource lookups
+  cluster_name: z.string().min(1).max(255), // Display name for cluster
+  cluster_region: z.string().min(1).max(50), // Cluster AWS region
+  db_proxy_url: z.string().optional(), // DB proxy URL from cluster stack outputs
   status: z.enum(['Pending', 'Deploying', 'Active', 'Failed', 'Terminated']),
   deployment_id: z.string().optional(),
   deployment_status: z.string().optional(),
@@ -257,9 +257,7 @@ export const ClusterRecordSchema = z.object({
   type: z.enum(['dedicated', 'shared']),
   environment: z.enum(['Production', 'Staging', 'Dev']),
   region: z.enum(AWS_REGIONS),
-  cidr: z.string().refine(validateCIDR, {
-    message: 'CIDR must be a valid private IPv4 CIDR block (RFC 1918)'
-  }),
+  cidr: z.string().min(1), // Simplified validation to avoid circular import issues
   code_bucket: z.string().min(1).max(255),
   bref_layer_arn: z.string().min(1),
   api_domain: z.string().min(1).max(255),
@@ -309,9 +307,6 @@ export const CreateTenantSchema = z.object({
     (url) => !url.includes('--'),
     'Tenant URL cannot contain consecutive hyphens'
   ).describe('Tenant subdomain (e.g., acme-corp, tenant123)'),
-  subscription_type: z.enum(['General', 'Made to Measure', 'Automotive', 'Rental']).describe('Subscription type'),
-  package_name: z.enum(['Essential', 'Professional', 'Premium', 'Enterprise']).describe('Package name'),
-  cluster_id: z.string().uuid().describe('Required cluster ID to assign tenant to specific cluster'),
 });
 
 export const CreateSubscriptionSchema = z.object({
@@ -319,16 +314,27 @@ export const CreateSubscriptionSchema = z.object({
   subscription_type_level: z.enum(['Production', 'Dev']).describe('Subscription type level'),
   domain_name: z.string().url().describe('Custom domain name (e.g., https://mywebsite.com)'),
   number_of_stores: z.number().int().min(1).default(1).optional().describe('Number of stores (minimum 1, default 1 if not provided)'),
-});
+  cluster_id: z.string().uuid().describe('Required cluster ID to assign subscription to specific cluster'),
+  // Subscription type selection (either ID or name required)
+  subscription_type_id: z.number().int().positive().optional().describe('Subscription type ID (preferred)'),
+  subscription_type: z.enum(['General', 'Made to Measure', 'Automotives', 'Rental', 'Subscriptions']).optional().describe('Subscription type name (for backward compatibility)'),
+  // Package selection (either ID or name required)
+  package_id: z.number().int().positive().optional().describe('Package ID (preferred)'),
+  package_name: z.enum(['Essential', 'Professional', 'Premium', 'Enterprise']).optional().describe('Package name (for backward compatibility)'),
+}).refine(
+  (data) => data.subscription_type_id || data.subscription_type,
+  'Either subscription_type_id or subscription_type must be provided'
+).refine(
+  (data) => data.package_id || data.package_name,
+  'Either package_id or package_name must be provided'
+);
 
 export const CreateClusterSchema = z.object({
   name: z.string().min(1).max(255),
   type: z.enum(['dedicated', 'shared']),
   environment: z.enum(['Production', 'Staging', 'Dev']),
   region: z.enum(AWS_REGIONS),
-  cidr: z.string().refine(validateCIDR, {
-    message: 'CIDR must be a valid private IPv4 CIDR block (RFC 1918)'
-  }),
+  cidr: z.string().min(1), // Simplified validation
   code_bucket: z.string().min(1).max(255),
   bref_layer_arn: z.string().min(1),
   api_domain: z.string().min(1).max(255),

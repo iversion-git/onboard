@@ -6,6 +6,8 @@ import { registerStaffRoutes } from './routes/staff.js';
 import { registerTenantRoutes } from './routes/tenant.js';
 import { registerSubscriptionRoutes } from './routes/subscription.js';
 import { registerClusterRoutes } from './routes/cluster.js';
+import { registerPackageRoutes } from './routes/packages.js';
+import { registerSubscriptionTypeRoutes } from './routes/subscription-types.js';
 import { logger } from './lib/logging.js';
 
 // Global router instance for cold start optimization
@@ -29,6 +31,8 @@ function initializeRouter() {
     registerTenantRoutes(router);
     registerSubscriptionRoutes(router);
     registerClusterRoutes(router);
+    registerPackageRoutes(router);
+    registerSubscriptionTypeRoutes(router);
 
     logger.info('Router initialized successfully with all routes registered');
     return router;

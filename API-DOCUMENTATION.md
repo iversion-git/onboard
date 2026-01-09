@@ -1,9 +1,47 @@
-# AWS Lambda Control Plane API Documentation
+# Onboard Service API Documentation
 
 ## Base URL
 ```
-https://6eoez7ugs9.execute-api.ap-southeast-2.amazonaws.com
+https://85n0x7rpf3.execute-api.ap-southeast-2.amazonaws.com/v1
 ```
+
+## API Endpoints Summary
+
+**Total Endpoints: 20**
+
+### Authentication Endpoints (3)
+- `POST /auth/login` - Staff login with JWT token generation
+- `POST /auth/password-reset/request` - Request password reset token via email
+- `POST /auth/password-reset/confirm` - Confirm password reset with token
+
+### Staff Management Endpoints (4)
+- `POST /staff/register` - Create new staff account (Admin only)
+- `POST /staff/enable` - Enable staff account (Admin only)
+- `POST /staff/disable` - Disable staff account (Admin only)
+- `GET /staff/me` - Get current authenticated staff profile
+
+### Tenant Management Endpoints (2)
+- `POST /tenant/register` - Register new tenant for ERP provisioning (Admin/Manager)
+- `GET /tenant/available-clusters` - Get available clusters by deployment type (Admin/Manager)
+
+### Subscription Management Endpoints (3)
+- `POST /subscription/create` - Create new subscription for tenant (Admin/Manager)
+- `GET /subscription/list` - List subscriptions for a tenant (Admin/Manager)
+- `GET /subscription/:subscriptionId` - Get specific subscription details (Admin/Manager)
+
+### Cluster Management Endpoints (6)
+- `GET /clusters` - List all clusters (Admin only)
+- `POST /cluster/register` - Create new cluster record (Admin only)
+- `POST /cluster/:id/deploy` - Deploy cluster infrastructure (Admin only)
+- `POST /cluster/:id/update` - Update existing cluster infrastructure (Admin only)
+- `GET /cluster/:id/status` - Get cluster deployment status (Admin only)
+- `DELETE /cluster/:id` - Delete In-Active cluster from database (Admin only)
+
+### Package Management Endpoints (1)
+- `GET /packages` - List all active packages for dropdown selection (Admin/Manager)
+
+### Subscription Type Management Endpoints (1)
+- `GET /subscription-types` - List all active subscription types for dropdown selection (Admin/Manager)
 
 ## Authentication
 Most endpoints require JWT authentication. Include the token in the Authorization header:
@@ -282,12 +320,11 @@ Error responses:
   "business_name": "Acme Corporation",         // ✅ Required - Business or company name (1-255 characters)
   "deployment_type": "Shared",                 // ✅ Required - "Shared" or "Dedicated"
   "region": "Australia",                       // ✅ Required - "Australia", "US", "UK", or "Europe"
-  "tenant_url": "acme-corp",                     // ✅ Required - Tenant subdomain (1-50 chars, lowercase letters, numbers, and hyphens only)
-  "subscription_type": "General",              // ✅ Required - "General", "Made to Measure", "Automotive", or "Rental"
-  "package_name": "Professional",              // ✅ Required - "Essential", "Professional", "Premium", or "Enterprise"
-  "cluster_id": "550e8400-e29b-41d4-a716-446655440004"  // ✅ Required - Specific cluster ID to assign tenant to
+  "tenant_url": "acme-corp"                    // ✅ Required - Tenant subdomain (1-50 chars, lowercase letters, numbers, and hyphens only)
 }
 ```
+
+**Note**: Subscription type and package selection have been moved to the subscription creation process for better flexibility.
 
 **Success Response (201)**:
 ```json
@@ -303,10 +340,6 @@ Error responses:
     "deployment_type": "Shared",
     "region": "Australia",
     "tenant_url": "acme-corp",
-    "subscription_type": "General",
-    "package_name": "Professional",
-    "cluster_id": "550e8400-e29b-41d4-a716-446655440004",
-    "cluster_name": "Shared Production Cluster AU",
     "created_at": "2025-01-07T05:00:00.000Z",
     "updated_at": "2025-01-07T05:00:00.000Z"
   },
@@ -323,10 +356,11 @@ Error responses:
 - `deployment_type`: Infrastructure deployment preference
 - `region`: Preferred geographic region for deployment
 - `tenant_url`: Unique subdomain identifier (e.g., "acme-corp" becomes "acme-corp.myapp.com")
-- `subscription_type`: Type of subscription service
-- `package_name`: Service package level
-- `cluster_id`: Required specific cluster assignment (must match deployment type and be active)
-- `cluster_name`: Display name of the assigned cluster (automatically populated from cluster_id)
+
+**Workflow**:
+1. **Step 1**: Register tenant with basic information (this endpoint)
+2. **Step 2**: Create subscription for the tenant with package and subscription type selection
+3. **Step 3**: System provisions infrastructure based on subscription details
 
 **Status Values**:
 - `Pending`: Newly created, awaiting provisioning
@@ -356,18 +390,11 @@ Error responses:
   - ✅ Valid: `acme-corp`, `tenant123`, `my-company`, `test-env-1`
   - ❌ Invalid: `Acme-Corp` (uppercase), `-acme` (starts with hyphen), `acme-` (ends with hyphen), `acme--corp` (consecutive hyphens), `acme_corp` (underscore), `acme.corp` (dot)
 
-**Cluster Assignment**:
-- `cluster_id` is required for all tenant registrations
-- The cluster must exist, be active, and match the tenant's deployment type
-- Shared tenants must be assigned to shared clusters
-- Dedicated tenants must be assigned to dedicated clusters
-- Use the `/tenant/available-clusters` endpoint to get valid cluster options
-
 **Error Responses**:
 - `401 Unauthorized` - Missing or invalid JWT token
 - `403 Forbidden` - Insufficient permissions (not admin or manager)
 - `409 Conflict` - Tenant URL is already taken
-- `400 ValidationError` - Invalid field values, format, missing cluster_id, or invalid cluster assignment
+- `400 ValidationError` - Invalid field values or format
 
 ---
 
@@ -435,6 +462,149 @@ GET /tenant/available-clusters?deployment_type=Shared
 
 ---
 
+### GET /packages
+**Description**: Get all active packages for dropdown selection
+
+**Authentication**: ✅ Required (Admin or Manager only)
+
+**Request Body**: None (GET request)
+
+**Success Response (200)**:
+```json
+{
+  "success": true,
+  "data": {
+    "packages": [
+      {
+        "package_id": 10,
+        "package_name": "Essential",
+        "description": "Basic feature set for small businesses",
+        "price": 29.99,
+        "features": [
+          "Basic inventory management",
+          "Simple reporting",
+          "Up to 2 users",
+          "Email support"
+        ]
+      },
+      {
+        "package_id": 20,
+        "package_name": "Professional",
+        "description": "Enhanced features for growing businesses",
+        "price": 79.99,
+        "features": [
+          "Advanced inventory management",
+          "Custom reporting",
+          "Up to 10 users",
+          "Priority support",
+          "API access"
+        ]
+      },
+      {
+        "package_id": 30,
+        "package_name": "Premium",
+        "description": "Advanced features for established businesses",
+        "price": 149.99,
+        "features": [
+          "Full inventory management",
+          "Advanced analytics",
+          "Up to 50 users",
+          "Phone support",
+          "Custom integrations",
+          "Multi-location support"
+        ]
+      },
+      {
+        "package_id": 40,
+        "package_name": "Enterprise",
+        "description": "Full feature set for large organizations",
+        "price": 299.99,
+        "features": [
+          "Enterprise inventory management",
+          "Real-time analytics",
+          "Unlimited users",
+          "Dedicated support",
+          "Custom development",
+          "White-label options",
+          "Advanced security"
+        ]
+      }
+    ],
+    "total_count": 4
+  },
+  "timestamp": "2025-01-09T05:00:00.000Z"
+}
+```
+
+**Response Fields**:
+- `packages`: Array of active packages with full details
+- `total_count`: Number of active packages
+- Only returns packages where `active: true`
+- Sorted by `package_id` in ascending order
+
+**Error Responses**:
+- `401 Unauthorized` - Missing or invalid JWT token
+- `403 Forbidden` - Insufficient permissions (not admin or manager)
+
+---
+
+### GET /subscription-types
+**Description**: Get all active subscription types for dropdown selection
+
+**Authentication**: ✅ Required (Admin or Manager only)
+
+**Request Body**: None (GET request)
+
+**Success Response (200)**:
+```json
+{
+  "success": true,
+  "data": {
+    "subscription_types": [
+      {
+        "subscription_type_id": 10,
+        "subscription_type_name": "General",
+        "description": "Standard business subscription for general retail and service businesses"
+      },
+      {
+        "subscription_type_id": 20,
+        "subscription_type_name": "Made to Measure",
+        "description": "Custom tailored solutions for businesses with specific measurement requirements"
+      },
+      {
+        "subscription_type_id": 30,
+        "subscription_type_name": "Automotives",
+        "description": "Specialized subscription for automotive industry businesses including parts, service, and sales"
+      },
+      {
+        "subscription_type_id": 40,
+        "subscription_type_name": "Rental",
+        "description": "Focused subscription for rental businesses including equipment, vehicle, and property rentals"
+      },
+      {
+        "subscription_type_id": 50,
+        "subscription_type_name": "Subscriptions",
+        "description": "Subscription-based business model for recurring services and products"
+      }
+    ],
+    "total_count": 5
+  },
+  "timestamp": "2025-01-09T05:00:00.000Z"
+}
+```
+
+**Response Fields**:
+- `subscription_types`: Array of active subscription types with descriptions
+- `total_count`: Number of active subscription types
+- Only returns subscription types where `active: true`
+- Sorted by `subscription_type_id` in ascending order
+
+**Error Responses**:
+- `401 Unauthorized` - Missing or invalid JWT token
+- `403 Forbidden` - Insufficient permissions (not admin or manager)
+
+---
+
 ## Role Permissions
 
 | Role | Login | Profile | Staff Mgmt | Tenant Mgmt |
@@ -490,7 +660,7 @@ GET /tenant/available-clusters?deployment_type=Shared
 ## Subscription Management Endpoints
 
 ### POST /subscription/create
-**Description**: Create a new subscription for a tenant
+**Description**: Create a new subscription for a tenant with package and subscription type selection
 
 **Authentication**: ✅ Required (Admin or Manager only)
 
@@ -499,10 +669,32 @@ GET /tenant/available-clusters?deployment_type=Shared
 {
   "tenant_id": "550e8400-e29b-41d4-a716-446655440003",  // ✅ Required - Tenant ID to create subscription for
   "subscription_type_level": "Production",               // ✅ Required - "Production" or "Dev"
-  "domain_name": "https://mywebsite.com",                // ✅ Required - Custom domain name
-  "number_of_stores": 3                                  // ❌ Optional - Number of stores (default: 1, minimum: 1)
+  "domain_name": "https://mywebsite.com",                // ✅ Required - Custom domain name (must be unique)
+  "number_of_stores": 3,                                 // ❌ Optional - Number of stores (default: 1, minimum: 1)
+  "cluster_id": "550e8400-e29b-41d4-a716-446655440004", // ✅ Required - Specific cluster ID to assign subscription to
+  
+  // Subscription Type Selection (either ID or name required)
+  "subscription_type_id": 10,                            // ✅ Required (if subscription_type not provided) - Subscription type ID (preferred)
+  "subscription_type": "General",                        // ✅ Required (if subscription_type_id not provided) - Subscription type name
+  
+  // Package Selection (either ID or name required)
+  "package_id": 20,                                      // ✅ Required (if package_name not provided) - Package ID (preferred)
+  "package_name": "Professional"                         // ✅ Required (if package_id not provided) - Package name
 }
 ```
+
+**Input Flexibility**:
+- You can provide `subscription_type_id` OR `subscription_type` (or both)
+- You can provide `package_id` OR `package_name` (or both)
+- If you provide both ID and name, the system validates they match
+- If you provide only ID, the system looks up the name
+- If you provide only name, the system looks up the ID
+
+**Uniqueness Validation**:
+- `domain_name` must be unique across all subscriptions
+- Generated `tenant_url` must be unique across all subscriptions
+- Generated `tenant_api_url` must be unique across all subscriptions
+- Returns `409 Conflict` if any URL/domain is already in use
 
 **Success Response (201)**:
 ```json
@@ -511,20 +703,22 @@ GET /tenant/available-clusters?deployment_type=Shared
   "data": {
     "subscription_id": "550e8400-e29b-41d4-a716-446655440005",
     "tenant_id": "550e8400-e29b-41d4-a716-446655440003",
-    "subscription_name": "tenant1-prod",
+    "tenant_name": "Acme Corporation",
     "subscription_type_level": "Production",
-    "tenant_url": "tenant1.flowrix.app",
-    "tenant_api_url": "tenant1.flowrix.app",
+    "tenant_url": "acme-corp-prod.shared.au.myapp.com",
+    "tenant_api_url": "acme-corp-prod-api.shared.au.myapp.com",
     "domain_name": "https://mywebsite.com",
     "number_of_stores": 3,
-    "region": "dedicated",
-    "deployment_type": "Dedicated",
-    "subscription_type_id": 1,
+    "region": "ap-southeast-2",
+    "deployment_type": "Shared",
+    "subscription_type_id": 10,
     "subscription_type_name": "General",
-    "package_id": 2,
+    "package_id": 20,
     "package_name": "Professional",
     "cluster_id": "550e8400-e29b-41d4-a716-446655440004",
-    "cluster_name": "Dedicated Production Cluster",
+    "cluster_name": "Shared Production Cluster",
+    "cluster_region": "ap-southeast-2",
+    "db_proxy_url": "cluster-proxy.amazonaws.com:3306",
     "status": "Pending",
     "created_at": "2025-01-07T05:00:00.000Z",
     "updated_at": "2025-01-07T05:00:00.000Z"
@@ -536,47 +730,58 @@ GET /tenant/available-clusters?deployment_type=Shared
 **Field Descriptions**:
 - `subscription_id`: Unique identifier for the subscription
 - `tenant_id`: ID of the tenant this subscription belongs to
-- `subscription_name`: Auto-generated name based on tenant URL and type (e.g., "acme-corp-prod", "acme-corp-dev", "acme-corp-dev-2")
+- `tenant_name`: Business name copied from tenant table for easy reference
 - `subscription_type_level`: Type of subscription (Production or Dev)
-- `tenant_url`: Generated tenant URL (e.g., "acme-corp.flowrix.app")
-- `tenant_api_url`: Generated API URL based on deployment type and region
-- `domain_name`: Custom domain name provided by user (e.g., "https://mywebsite.com")
+- `tenant_url`: Generated tenant URL (validated for uniqueness)
+- `tenant_api_url`: Generated API URL (validated for uniqueness)
+- `domain_name`: Custom domain name provided by user (validated for uniqueness)
 - `number_of_stores`: Number of stores for this subscription (default: 1, minimum: 1)
-- `region`: AWS region code (ap-southeast-2, us-east-1, eu-west-2, eu-central-1) or "dedicated" for dedicated deployments
+- `region`: AWS region code (ap-southeast-2, us-east-1, eu-west-2, eu-central-1)
 - `deployment_type`: Copied from tenant (Shared or Dedicated)
-- `subscription_type_id`: Numeric ID referencing the subscription_types table
-- `subscription_type_name`: Name fetched from subscription_types table (e.g., "General", "Made to Measure", "Automotive", "Rental")
-- `package_id`: Numeric ID referencing the packages table
-- `package_name`: Name fetched from packages table (e.g., "Essential", "Professional", "Premium", "Enterprise")
-- `cluster_id`: Cluster ID copied from tenant
-- `cluster_name`: Cluster name copied from tenant
+- `subscription_type_id`: Numeric ID of the selected subscription type
+- `subscription_type_name`: Name of the selected subscription type
+- `package_id`: Numeric ID of the selected package
+- `package_name`: Name of the selected package
+- `cluster_id`: ID of the assigned cluster
+- `cluster_name`: Name of the assigned cluster
+- `cluster_region`: AWS region of the assigned cluster
+- `db_proxy_url`: Database proxy URL from cluster (if available)
 - `status`: Current subscription status (Pending, Deploying, Active, Failed, Terminated)
 
+**Available Subscription Types**:
+- **ID 10**: General
+- **ID 20**: Made to Measure
+- **ID 30**: Automotives
+- **ID 40**: Rental
+- **ID 50**: Subscriptions
+
+**Available Packages**:
+- **ID 10**: Essential
+- **ID 20**: Professional
+- **ID 30**: Premium
+- **ID 40**: Enterprise
+
+**Business Rules**:
+- Only one Production subscription allowed per tenant
+- Multiple Dev subscriptions allowed per tenant
+- Dev subscriptions get random 2-digit suffix for uniqueness
+- Tenant must exist and be in Active or Pending status
+- Cluster must exist and be Active
+- Subscription type and package must be active
+
 **URL Generation Rules**:
-- **Production Tenant URL**: `{tenant_url}.flowrix.app` (e.g., `tenant1.flowrix.app`)
-- **Dev Tenant URL**: `{tenant_url}-dev-{random2digits}.flowrix.app` (e.g., `tenant1-dev-22.flowrix.app`)
-- **Production API URL for Dedicated**: `{tenant_url}.flowrix.app` (e.g., `tenant1.flowrix.app`)
-- **Dev API URL for Dedicated**: `{tenant_url}-dev-{random2digits}.flowrix.app` (e.g., `tenant1-dev-22.flowrix.app`)
-- **Production API URL for Shared**: `{tenant_url}.{region}.flowrix.app` (e.g., `tenant1.au.flowrix.app`)
-- **Dev API URL for Shared**: `{tenant_url}-dev-{random2digits}.{region}.flowrix.app` (e.g., `tenant1-dev-22.au.flowrix.app`)
+- **Production Tenant URL**: `{tenant_url}-prod.{deployment}.{region}.myapp.com`
+- **Dev Tenant URL**: `{tenant_url}-dev-{random2digits}.{deployment}.{region}.myapp.com`
+- **API URLs**: Same pattern with `-api` suffix
+- **Shared deployments**: Include region code (au, us, uk, eu)
+- **Dedicated deployments**: Use "dedicated" instead of region
 
-**Region Mapping**:
-- **Australia** → `ap-southeast-2`
-- **US** → `us-east-1`
-- **UK** → `eu-west-2`
-- **Europe** → `eu-central-1`
-- **Dedicated deployments** → `dedicated` (regardless of display region)
-
-**Subscription Type ID Mapping** (Dynamic from `subscription_types` table):
-- **General** → `1`
-- **Made to Measure** → `2`
-- **Automotive** → `3`
-- **Rental** → `4`
-- *Additional types can be added to the table*
-
-**Package ID Mapping** (Dynamic from `packages` table):
-- **Essential** → `1`
-- **Professional** → `2`
+**Error Responses**:
+- `401 Unauthorized` - Missing or invalid JWT token
+- `403 Forbidden` - Insufficient permissions (not admin or manager)
+- `400 ValidationError` - Invalid field values, missing required fields, or inactive subscription type/package
+- `404 NotFound` - Tenant or cluster not found
+- `409 Conflict` - Domain name, tenant URL, or API URL already in use, or multiple production subscriptions for tenant
 - **Premium** → `3`
 - **Enterprise** → `4`
 - *Additional packages can be added to the table*
