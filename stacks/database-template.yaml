@@ -502,7 +502,6 @@ Resources:
       RequireTLS: true
       IdleClientTimeout: 1800
       MaxConnectionsPercent: 100
-      MaxIdleConnectionsPercent: 50
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-aurora-proxy
@@ -540,6 +539,10 @@ Resources:
       TargetGroupName: default
       DBClusterIdentifiers:
         - !Ref AuroraCluster
+      ConnectionPoolConfigurationInfo:
+        MaxConnectionsPercent: 100
+        MaxIdleConnectionsPercent: 50
+        ConnectionBorrowTimeout: 120
 
   # ==========================================
   # ElastiCache Serverless Redis
