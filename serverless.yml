@@ -21,6 +21,7 @@ custom:
     # SES Configuration by Stage
     sesFromEmail:
       dev: onboard-dev@flowrix.app     # Development environment sender
+      sand: onboard-sandbox@flowrix.app  # Sandbox environment sender
       staging: onboard-staging@flowrix.app  # Staging environment sender  
       prod: onboard@flowrix.app        # Production environment sender
     
@@ -143,9 +144,13 @@ provider:
   tracing:
     lambda: true
     apiGateway: true
-  apiGateway:
-    # Use v1 as API stage regardless of deployment stage
-    stage: v1
+  # Remove API Gateway stage override - let it use deployment stage naturally
+  # apiGateway:
+  #   stage: v1
+  # Stack-level protection tags
+  stackTags:
+    ProtectionLevel: High
+    DataClassification: Critical
 
 # ============================================================================
 # ============================================================================
@@ -398,6 +403,7 @@ resources:
     # Landlord Global Table - Multi-region replication
     LandlordGlobalTable:
       Type: AWS::DynamoDB::GlobalTable
+      DeletionPolicy: Retain
       Properties:
         TableName: landlord-${self:provider.stage}
         BillingMode: PAY_PER_REQUEST

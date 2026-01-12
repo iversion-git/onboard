@@ -2,11 +2,12 @@
 
 /**
  * Upload CloudFormation templates to S3 during deployment
- * This script uploads only the shared cluster templates (main + 3 nested stacks)
+ * This script uploads universal cluster templates (main + 3 nested stacks)
+ * Templates work for both shared and dedicated cluster deployments
  * Updated to support IAM authentication and 3-tier network architecture
  */
 
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, ListObjectsV2Command, DeleteObjectCommand, ListObjectVersionsCommand, DeleteObjectsCommand } from '@aws-sdk/client-s3';
 import fs from 'fs';
 import path from 'path';
 
@@ -30,31 +31,115 @@ function getBucketName() {
 
 const BUCKET_NAME = getBucketName();
 
-// Template files to upload - Only shared cluster templates
+// Template files to upload - Universal templates for both shared and dedicated clusters
 const TEMPLATES = [
   // Main orchestration template
   {
-    localPath: 'stacks/shared-main-template.yaml',
-    s3Key: 'shared-main-template.yaml',
-    description: 'Shared cluster main template (orchestrates nested stacks)'
+    localPath: 'stacks/main-template.yaml',
+    s3Key: 'main-template.yaml',
+    description: 'Main cluster template (orchestrates nested stacks for both shared and dedicated)'
   },
-  // Shared cluster nested templates
+  // Nested templates
   {
-    localPath: 'stacks/shared-infrastructure-template.yaml',
-    s3Key: 'shared-infrastructure-template.yaml',
-    description: 'Shared cluster infrastructure template (VPC, subnets, security groups)'
-  },
-  {
-    localPath: 'stacks/shared-database-template.yaml',
-    s3Key: 'shared-database-template.yaml',
-    description: 'Shared cluster database template (Aurora MySQL, RDS Proxy, Redis with IAM auth)'
+    localPath: 'stacks/infrastructure-template.yaml',
+    s3Key: 'infrastructure-template.yaml',
+    description: 'Infrastructure template (VPC, subnets, security groups)'
   },
   {
-    localPath: 'stacks/shared-app-template.yaml',
-    s3Key: 'shared-app-template.yaml',
-    description: 'Shared cluster application template (Laravel Lambda, API Gateway, SQS)'
+    localPath: 'stacks/database-template.yaml',
+    s3Key: 'database-template.yaml',
+    description: 'Database template (Aurora MySQL, RDS Proxy, Redis with IAM auth)'
+  },
+  {
+    localPath: 'stacks/app-template.yaml',
+    s3Key: 'app-template.yaml',
+    description: 'Application template (Laravel Lambda, API Gateway, SQS)'
   }
 ];
+
+async function cleanupOldTemplates(s3Client) {
+  console.log('🧹 Cleaning up old template files and versions...');
+  
+  try {
+    // List all object versions in the bucket (including delete markers)
+    const listVersionsCommand = new ListObjectVersionsCommand({
+      Bucket: BUCKET_NAME,
+    });
+    
+    const versionsResponse = await s3Client.send(listVersionsCommand);
+    
+    // Collect all objects and versions to delete
+    const objectsToDelete = [];
+    
+    // Add all object versions
+    if (versionsResponse.Versions) {
+      versionsResponse.Versions.forEach(version => {
+        if (version.Key && version.Key.startsWith('shared-')) {
+          objectsToDelete.push({
+            Key: version.Key,
+            VersionId: version.VersionId
+          });
+        }
+      });
+    }
+    
+    // Add all delete markers
+    if (versionsResponse.DeleteMarkers) {
+      versionsResponse.DeleteMarkers.forEach(marker => {
+        if (marker.Key && marker.Key.startsWith('shared-')) {
+          objectsToDelete.push({
+            Key: marker.Key,
+            VersionId: marker.VersionId
+          });
+        }
+      });
+    }
+    
+    if (objectsToDelete.length === 0) {
+      console.log('   No old template files or versions to clean up');
+      return;
+    }
+    
+    console.log(`   Found ${objectsToDelete.length} old template files/versions to delete`);
+    
+    // Delete objects in batches (S3 allows max 1000 per request)
+    const batchSize = 1000;
+    for (let i = 0; i < objectsToDelete.length; i += batchSize) {
+      const batch = objectsToDelete.slice(i, i + batchSize);
+      
+      try {
+        const deleteCommand = new DeleteObjectsCommand({
+          Bucket: BUCKET_NAME,
+          Delete: {
+            Objects: batch,
+            Quiet: false
+          }
+        });
+        
+        const deleteResponse = await s3Client.send(deleteCommand);
+        
+        if (deleteResponse.Deleted) {
+          console.log(`   ✅ Deleted ${deleteResponse.Deleted.length} objects/versions`);
+        }
+        
+        if (deleteResponse.Errors && deleteResponse.Errors.length > 0) {
+          console.log(`   ⚠️  ${deleteResponse.Errors.length} deletion errors:`);
+          deleteResponse.Errors.forEach(error => {
+            console.log(`      - ${error.Key}: ${error.Message}`);
+          });
+        }
+      } catch (error) {
+        console.error(`   ❌ Failed to delete batch:`, error.message);
+      }
+    }
+    
+    console.log('✅ Old template cleanup completed');
+    console.log('');
+  } catch (error) {
+    console.error('❌ Failed to cleanup old templates:', error.message);
+    console.log('');
+  }
+}
 
 async function uploadTemplate(s3Client, template) {
   try {
@@ -110,6 +195,9 @@ async function uploadAllTemplates() {
     region: REGION,
     maxAttempts: 3
   });
+  
+  // Clean up old template files first
+  await cleanupOldTemplates(s3Client);
   
   let successCount = 0;
   let totalCount = TEMPLATES.length;

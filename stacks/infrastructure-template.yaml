@@ -76,63 +76,54 @@ Parameters:
   PrivateAppSubnet1CIDR:
     Type: String
     Description: CIDR block for Private App Subnet in Availability Zone 1
-    Default: 10.0.1.0/24
     AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
     ConstraintDescription: Must be a valid CIDR block in the format x.x.x.x/x
 
   PrivateAppSubnet2CIDR:
     Type: String
     Description: CIDR block for Private App Subnet in Availability Zone 2
-    Default: 10.0.2.0/24
     AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
     ConstraintDescription: Must be a valid CIDR block in the format x.x.x.x/x
 
   PrivateAppSubnet3CIDR:
     Type: String
     Description: CIDR block for Private App Subnet in Availability Zone 3
-    Default: 10.0.3.0/24
     AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
     ConstraintDescription: Must be a valid CIDR block in the format x.x.x.x/x
 
   PrivateDBSubnet1CIDR:
     Type: String
     Description: CIDR block for Private DB Subnet in Availability Zone 1
-    Default: 10.0.11.0/24
     AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
     ConstraintDescription: Must be a valid CIDR block in the format x.x.x.x/x
 
   PrivateDBSubnet2CIDR:
     Type: String
     Description: CIDR block for Private DB Subnet in Availability Zone 2
-    Default: 10.0.12.0/24
     AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
     ConstraintDescription: Must be a valid CIDR block in the format x.x.x.x/x
 
   PrivateDBSubnet3CIDR:
     Type: String
     Description: CIDR block for Private DB Subnet in Availability Zone 3
-    Default: 10.0.13.0/24
     AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
     ConstraintDescription: Must be a valid CIDR block in the format x.x.x.x/x
 
   PublicSubnet1CIDR:
     Type: String
     Description: CIDR block for Public Subnet in Availability Zone 1
-    Default: 10.0.21.0/24
     AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
     ConstraintDescription: Must be a valid CIDR block in the format x.x.x.x/x
 
   PublicSubnet2CIDR:
     Type: String
     Description: CIDR block for Public Subnet in Availability Zone 2
-    Default: 10.0.22.0/24
     AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
     ConstraintDescription: Must be a valid CIDR block in the format x.x.x.x/x
 
   PublicSubnet3CIDR:
     Type: String
     Description: CIDR block for Public Subnet in Availability Zone 3
-    Default: 10.0.23.0/24
     AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
     ConstraintDescription: Must be a valid CIDR block in the format x.x.x.x/x
 

@@ -107,8 +107,8 @@ export const deployHandler: RouteHandler = async (req, res) => {
     try {
       const config = getConfig();
       
-      // Use main template that orchestrates nested stacks based on cluster type
-      const templateKey = `${cluster.type}-main-template.yaml`;
+      // Use main template for both shared and dedicated deployments
+      const templateKey = 'main-template.yaml';
       
       // Get S3 template manager
       const templateManager = getS3TemplateManager(config.s3.templateBucket);
@@ -145,7 +145,11 @@ export const deployHandler: RouteHandler = async (req, res) => {
         { ParameterKey: 'ClusterName', ParameterValue: sanitizedClusterName },
         { ParameterKey: 'ClusterType', ParameterValue: cluster.type === 'dedicated' ? 'Dedicated' : 'Shared' },
         { ParameterKey: 'ClusterEnvironment', ParameterValue: cluster.environment },
-        // Private App subnet CIDRs (no public subnets needed)
+        // Public subnet CIDRs
+        { ParameterKey: 'PublicSubnet1CIDR', ParameterValue: subnets.public[0] },
+        { ParameterKey: 'PublicSubnet2CIDR', ParameterValue: subnets.public[1] },
+        { ParameterKey: 'PublicSubnet3CIDR', ParameterValue: subnets.public[2] },
+        // Private App subnet CIDRs
         { ParameterKey: 'PrivateAppSubnet1CIDR', ParameterValue: subnets.privateApp[0] },
         { ParameterKey: 'PrivateAppSubnet2CIDR', ParameterValue: subnets.privateApp[1] },
         { ParameterKey: 'PrivateAppSubnet3CIDR', ParameterValue: subnets.privateApp[2] },
@@ -234,8 +238,10 @@ export const deployHandler: RouteHandler = async (req, res) => {
         stackName,
         status: deploymentResult.status,
         clusterName: cluster.name,
+        clusterType: cluster.type,
         environment: cluster.environment,
         vpcCidr: cluster.cidr,
+        templateUsed: templateKey,
         calculatedSubnets: subnets,
       });
 
