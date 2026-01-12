@@ -2,7 +2,8 @@
 
 /**
  * Upload CloudFormation templates to S3 during deployment
- * This script runs as part of the serverless deployment process
+ * This script uploads only the shared cluster templates (main + 3 nested stacks)
+ * Updated to support IAM authentication and 3-tier network architecture
  */
 
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
@@ -29,18 +30,13 @@ function getBucketName() {
 
 const BUCKET_NAME = getBucketName();
 
-// Template files to upload
+// Template files to upload - Only shared cluster templates
 const TEMPLATES = [
-  // Main orchestration templates
+  // Main orchestration template
   {
     localPath: 'stacks/shared-main-template.yaml',
     s3Key: 'shared-main-template.yaml',
     description: 'Shared cluster main template (orchestrates nested stacks)'
-  },
-  {
-    localPath: 'stacks/dedicated-main-template.yaml',
-    s3Key: 'dedicated-main-template.yaml',
-    description: 'Dedicated cluster main template (orchestrates nested stacks)'
   },
   // Shared cluster nested templates
   {
@@ -51,39 +47,12 @@ const TEMPLATES = [
   {
     localPath: 'stacks/shared-database-template.yaml',
     s3Key: 'shared-database-template.yaml',
-    description: 'Shared cluster database template (Aurora MySQL, RDS Proxy, Redis)'
+    description: 'Shared cluster database template (Aurora MySQL, RDS Proxy, Redis with IAM auth)'
   },
   {
     localPath: 'stacks/shared-app-template.yaml',
     s3Key: 'shared-app-template.yaml',
     description: 'Shared cluster application template (Laravel Lambda, API Gateway, SQS)'
-  },
-  {
-    localPath: 'stacks/shared-edge-template.yaml',
-    s3Key: 'shared-edge-template.yaml',
-    description: 'Shared cluster edge template (CloudFront, WAF, Frontend S3)'
-  },
-  // Dedicated cluster nested templates
-  {
-    localPath: 'stacks/dedicated-infrastructure-template.yaml',
-    s3Key: 'dedicated-infrastructure-template.yaml',
-    description: 'Dedicated cluster infrastructure template (VPC, subnets, security groups)'
-  },
-  {
-    localPath: 'stacks/dedicated-database-template.yaml',
-    s3Key: 'dedicated-database-template.yaml',
-    description: 'Dedicated cluster database template (Aurora MySQL, RDS Proxy)'
-  },
-  // Legacy templates (for backward compatibility)
-  {
-    localPath: 'stacks/dedicated-cluster-template.yaml',
-    s3Key: 'dedicated-cluster-template.yaml',
-    description: 'Dedicated cluster CloudFormation template (legacy - full stack)'
-  },
-  {
-    localPath: 'stacks/shared-cluster-template.yaml', 
-    s3Key: 'shared-cluster-template.yaml',
-    description: 'Shared cluster CloudFormation template (legacy - full stack)'
   }
 ];
 
