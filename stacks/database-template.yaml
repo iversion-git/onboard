@@ -488,6 +488,8 @@ Resources:
       Auth:
         - AuthScheme: SECRETS
           SecretArn: !GetAtt AuroraCluster.MasterUserSecret.SecretArn
+          IAMAuth: REQUIRED
+      DefaultAuthenticationScheme: IAM
       RoleArn: !GetAtt DBProxyRDSConnectRole.Arn
       VpcSubnetIds: !Split
         - ','
