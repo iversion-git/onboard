@@ -1,0 +1,1176 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Shared cluster application stack - Bref PHP 8.2 (Laravel), HTTP API, SQS, Scheduler->SQS, private S3 bucket.
+  Lambda code pulled from cluster code bucket (static key lambda-api.zip).
+  Integrates with infrastructure and database stacks via CloudFormation imports.
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Description: Environment identifier (must match infrastructure and database stacks)
+    MinLength: 1
+    MaxLength: 50
+    AllowedPattern: ^[a-zA-Z][a-zA-Z0-9-]*$
+    ConstraintDescription: Must begin with a letter and contain only alphanumeric characters and hyphens
+
+  AppName:
+    Type: String
+    Default: flowrix
+    Description: Application name for resource naming
+
+  Stage:
+    Type: String
+    Default: prod
+    Description: Deployment stage (prod, staging, dev)
+
+  # Code bucket name from cluster record (passed from main template)
+  CodeBucketName:
+    Type: String
+    Description: S3 bucket name containing lambda-api.zip (from cluster code_bucket field)
+    MinLength: 1
+    ConstraintDescription: Must specify the code bucket name
+
+  QueueName:
+    Type: String
+    Default: prod-sqs
+    Description: SQS queue name for Laravel job processing
+
+  # Bref Layer Configuration
+  BrefLayerArn:
+    Type: String
+    Description: Bref PHP layer ARN for the deployment region
+    MinLength: 1
+    ConstraintDescription: Must specify the Bref PHP layer ARN
+
+  # API Domain Configuration
+  ApiDomain:
+    Type: String
+    Description: Custom API domain name (e.g., tenant1.au.myapp.com)
+    MinLength: 1
+    ConstraintDescription: Must specify the API domain name
+
+  CertificateArn:
+    Type: String
+    Description: ACM certificate ARN for the API domain
+    MinLength: 1
+    ConstraintDescription: Must specify the ACM certificate ARN
+
+  ProjectName:
+    Type: String
+    Description: Optional project name for resource tagging
+    Default: ""
+    MaxLength: 100
+
+  CostCenter:
+    Type: String
+    Description: Optional cost center identifier for resource tagging
+    Default: ""
+    MaxLength: 100
+
+  Owner:
+    Type: String
+    Description: Optional owner or team name for resource tagging
+    Default: ""
+    MaxLength: 100
+
+  # Cluster-specific parameters for tagging
+  ClusterName:
+    Type: String
+    Description: Name of the cluster for resource tagging
+    MinLength: 1
+    MaxLength: 255
+
+  ClusterType:
+    Type: String
+    Description: Type of cluster (Shared or Dedicated) for resource tagging
+    AllowedValues:
+      - Shared
+      - Dedicated
+    ConstraintDescription: Must be either Shared or Dedicated
+
+  ClusterEnvironment:
+    Type: String
+    Description: Environment of cluster (Production, Staging, or Dev) for resource tagging
+    AllowedValues:
+      - Production
+      - Staging
+      - Dev
+    ConstraintDescription: Must be Production, Staging, or Dev
+
+  ClusterIdShort:
+    Type: String
+    Description: Short cluster ID (first 8 characters) for resource naming
+    MinLength: 8
+    MaxLength: 8
+    AllowedPattern: ^[a-f0-9]{8}$
+    ConstraintDescription: Must be exactly 8 lowercase hexadecimal characters
+
+Conditions:
+  # Conditions for optional custom tags
+  HasProjectName: !Not [!Equals [!Ref ProjectName, '']]
+  HasCostCenter: !Not [!Equals [!Ref CostCenter, '']]
+  HasOwner: !Not [!Equals [!Ref Owner, '']]
+  
+  # Environment conditions for lowercase naming
+  IsProduction: !Equals [!Ref ClusterEnvironment, 'Production']
+  IsStaging: !Equals [!Ref ClusterEnvironment, 'Staging']
+
+Globals:
+  Function:
+    Runtime: provided.al2
+    Architectures: [x86_64]
+    MemorySize: 1024
+    Timeout: 30
+    VpcConfig:
+      SecurityGroupIds:
+        - !ImportValue
+          'Fn::Sub': '${EnvironmentName}-LambdaSecurityGroup'
+      SubnetIds: !Split
+        - ','
+        - !ImportValue
+          'Fn::Sub': '${EnvironmentName}-PrivateAppSubnets'
+    Layers:
+      # Single Bref PHP layer for API-only application
+      - !Ref BrefLayerArn
+    Environment:
+      Variables:
+        # --- Derived from deployment ---
+        AWS_EVENT_BRIDGE_ARN: !GetAtt AppQueue.Arn
+        AWS_EVENT_BRIDGE_ROLE_ARN: !GetAtt SchedulerToSqsRole.Arn
+        AWS_BUCKET: !Ref PrivateDataBucket
+        AWS_S3_REGION: !Ref AWS::Region
+        # SQS (Laravel expects these in some setups)
+        SQS_PREFIX: !Sub "https://sqs.${AWS::Region}.amazonaws.com/${AWS::AccountId}"
+        SQS_QUEUE: !Ref QueueName
+        SQS_QUEUE_URL: !Ref AppQueue
+        # Compat / app usage
+        PRIVATE_BUCKET: !Ref PrivateDataBucket
+        # From DB stack output (Redis endpoint)
+        REDIS_HOST: !ImportValue
+          'Fn::Sub': '${EnvironmentName}-RedisEndpoint'
+        # Database connection (RDS Proxy endpoint)
+        DB_HOST: !ImportValue
+          'Fn::Sub': '${EnvironmentName}-DBProxyEndpoint'
+        DB_PORT: "3306"
+        DB_DATABASE: !ImportValue
+          'Fn::Sub': '${EnvironmentName}-DatabaseName'
+        # Fixed Laravel settings
+        CACHE_DRIVER: redis
+        JWT_SECRET: "mE8q2wXv7Kp1Zt9Rj4Nf0aHs6Ld3cYuB"
+        LOG_CHANNEL: stderr
+        QUEUE_CONNECTION: sqs
+        REDIS_CLIENT: predis
+        REDIS_PORT: "6379"
+        REDIS_SCHEME: tls
+        SESSION_DRIVER: redis
+    Tags:
+      Name: !Sub ${ClusterName}-Lambda
+      Type: !Ref ClusterType
+      Environment: !Ref ClusterEnvironment
+      ManagedBy: CloudFormation
+
+Resources:
+  # ==========================================
+  # CloudWatch Log Groups
+  # ==========================================
+  
+  # WAF Log Group
+  WAFLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub 
+        - "aws-waf-logs-${ClusterName}-${Environment}"
+        - Environment: !If 
+          - IsProduction
+          - "prod"
+          - !If 
+            - IsStaging
+            - "staging"
+            - "dev"
+      RetentionInDays: 14
+      Tags:
+        - Key: Name
+          Value: !Sub 
+            - "aws-waf-logs-${ClusterName}-${Environment}"
+            - Environment: !If 
+              - IsProduction
+              - "prod"
+              - !If 
+                - IsStaging
+                - "staging"
+                - "dev"
+        - Key: Type
+          Value: !Ref ClusterType
+        - Key: Environment
+          Value: !Ref ClusterEnvironment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # API Gateway Log Group
+  ApiGatewayLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub 
+        - "/aws/apigateway/${ClusterName}/${Environment}"
+        - Environment: !If 
+          - IsProduction
+          - "prod"
+          - !If 
+            - IsStaging
+            - "staging"
+            - "dev"
+      RetentionInDays: 14
+      Tags:
+        - Key: Name
+          Value: !Sub 
+            - "${ClusterName}-${Environment}-api-logs-${ClusterIdShort}"
+            - Environment: !If 
+              - IsProduction
+              - "prod"
+              - !If 
+                - IsStaging
+                - "staging"
+                - "dev"
+        - Key: Type
+          Value: !Ref ClusterType
+        - Key: Environment
+          Value: !Ref ClusterEnvironment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # Lambda Function Log Groups
+  WebFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub 
+        - "/aws/lambda/${ClusterName}-${Environment}-web-${ClusterIdShort}"
+        - Environment: !If 
+          - IsProduction
+          - "prod"
+          - !If 
+            - IsStaging
+            - "staging"
+            - "dev"
+      RetentionInDays: 14
+      Tags:
+        - Key: Name
+          Value: !Sub 
+            - "${ClusterName}-${Environment}-web-logs-${ClusterIdShort}"
+            - Environment: !If 
+              - IsProduction
+              - "prod"
+              - !If 
+                - IsStaging
+                - "staging"
+                - "dev"
+        - Key: Type
+          Value: !Ref ClusterType
+        - Key: Environment
+          Value: !Ref ClusterEnvironment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  WorkerFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub 
+        - "/aws/lambda/${ClusterName}-${Environment}-worker-${ClusterIdShort}"
+        - Environment: !If 
+          - IsProduction
+          - "prod"
+          - !If 
+            - IsStaging
+            - "staging"
+            - "dev"
+      RetentionInDays: 14
+      Tags:
+        - Key: Name
+          Value: !Sub 
+            - "${ClusterName}-${Environment}-worker-logs-${ClusterIdShort}"
+            - Environment: !If 
+              - IsProduction
+              - "prod"
+              - !If 
+                - IsStaging
+                - "staging"
+                - "dev"
+        - Key: Type
+          Value: !Ref ClusterType
+        - Key: Environment
+          Value: !Ref ClusterEnvironment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  ArtisanFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub 
+        - "/aws/lambda/${ClusterName}-${Environment}-artisan-${ClusterIdShort}"
+        - Environment: !If 
+          - IsProduction
+          - "prod"
+          - !If 
+            - IsStaging
+            - "staging"
+            - "dev"
+      RetentionInDays: 14
+      Tags:
+        - Key: Name
+          Value: !Sub 
+            - "${ClusterName}-${Environment}-artisan-logs-${ClusterIdShort}"
+            - Environment: !If 
+              - IsProduction
+              - "prod"
+              - !If 
+                - IsStaging
+                - "staging"
+                - "dev"
+        - Key: Type
+          Value: !Ref ClusterType
+        - Key: Environment
+          Value: !Ref ClusterEnvironment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # ==========================================
+  # API Gateway CloudWatch Logging Setup
+  # ==========================================
+  
+  # IAM Role for API Gateway to write to CloudWatch Logs
+  ApiGatewayCloudWatchRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 
+        - "${ClusterName}-${Environment}-apigateway-logs-role-${ClusterIdShort}"
+        - Environment: !If 
+          - IsProduction
+          - "prod"
+          - !If 
+            - IsStaging
+            - "staging"
+            - "dev"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apigateway.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs
+      Tags:
+        - Key: Name
+          Value: !Sub 
+            - "${ClusterName}-${Environment}-apigateway-logs-role-${ClusterIdShort}"
+            - Environment: !If 
+              - IsProduction
+              - "prod"
+              - !If 
+                - IsStaging
+                - "staging"
+                - "dev"
+        - Key: Type
+          Value: !Ref ClusterType
+        - Key: Environment
+          Value: !Ref ClusterEnvironment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # API Gateway Account Configuration (sets the CloudWatch role for the account)
+  ApiGatewayAccount:
+    Type: AWS::ApiGateway::Account
+    Properties:
+      CloudWatchRoleArn: !GetAtt ApiGatewayCloudWatchRole.Arn
+
+  # ==========================================
+  # Regional WAF for API Gateway Protection
+  # ==========================================
+  
+  ApiGatewayWAF:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: !Sub 
+        - "${ClusterName}-${Environment}-waf-${ClusterIdShort}"
+        - Environment: !If 
+          - IsProduction
+          - "prod"
+          - !If 
+            - IsStaging
+            - "staging"
+            - "dev"
+      Description: Regional WAF to protect API Gateway - Block all except CloudFront with custom header
+      Scope: REGIONAL
+      DefaultAction:
+        Block: {}  # Block all by default - no allow rules needed since no CloudFront
+      Rules:
+        # AWS Managed Rule - Core Rule Set (OWASP Top 10) - Priority 1
+        - Name: AWSManagedRulesCommonRuleSet
+          Priority: 1
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesCommonRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: CommonRuleSetMetric
+        
+        # AWS Managed Rule - Known Bad Inputs - Priority 2
+        - Name: AWSManagedRulesKnownBadInputsRuleSet
+          Priority: 2
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesKnownBadInputsRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: KnownBadInputsMetric
+        
+        # AWS Managed Rule - PHP Application Protection - Priority 3
+        - Name: AWSManagedRulesPHPRuleSet
+          Priority: 3
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesPHPRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: PHPRuleSetMetric
+        
+        # AWS Managed Rule - Linux Operating System Protection - Priority 4
+        - Name: AWSManagedRulesLinuxRuleSet
+          Priority: 4
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesLinuxRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: LinuxRuleSetMetric
+        
+        # AWS Managed Rule - SQL Database Protection - Priority 5
+        - Name: AWSManagedRulesSQLiRuleSet
+          Priority: 5
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesSQLiRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: SQLiRuleSetMetric
+        
+        # AWS Managed Rule - IP Reputation (includes anonymous IPs) - Priority 6
+        - Name: AWSManagedRulesAmazonIpReputationList
+          Priority: 6
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesAmazonIpReputationList
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: IpReputationMetric
+        
+        # AWS Managed Rule - Anonymous IP List - Priority 7
+        - Name: AWSManagedRulesAnonymousIpList
+          Priority: 7
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesAnonymousIpList
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: AnonymousIpListMetric
+        
+        # AWS Managed Rule - Bot Control (blocks all bots including search engines) - Priority 8
+        - Name: AWSManagedRulesBotControlRuleSet
+          Priority: 8
+          OverrideAction:
+            None: {}
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesBotControlRuleSet
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: BotControlMetric
+        
+        # Strict Rate Limiting - 50 requests per minute per IP - Priority 9
+        - Name: StrictApiRateLimitRule
+          Priority: 9
+          Action:
+            Block: {}
+          Statement:
+            RateBasedStatement:
+              Limit: 50  # 50 requests per 5 minutes per IP (10 requests per minute average)
+              AggregateKeyType: IP
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: StrictApiRateLimitMetric
+      
+      VisibilityConfig:
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: !Sub ${EnvironmentName}-api-gateway-waf
+      
+      Tags:
+        - Key: Name
+          Value: !Sub 
+            - "${ClusterName}-${Environment}-waf-${ClusterIdShort}"
+            - Environment: !If 
+              - IsProduction
+              - "prod"
+              - !If 
+                - IsStaging
+                - "staging"
+                - "dev"
+        - Key: Type
+          Value: !Ref ClusterType
+        - Key: Environment
+          Value: !Ref ClusterEnvironment
+        - Key: Purpose
+          Value: API Gateway Protection
+        - Key: ManagedBy
+          Value: CloudFormation
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  # WAF Logging Configuration
+  WAFLoggingConfiguration:
+    Type: AWS::WAFv2::LoggingConfiguration
+    DependsOn: WAFLogGroup
+    Properties:
+      ResourceArn: !GetAtt ApiGatewayWAF.Arn
+      LogDestinationConfigs:
+        # Build the ARN explicitly to avoid any trailing ":*"
+        - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:${WAFLogGroup}"
+
+  # WAF Association with REST API Gateway
+  ApiGatewayWAFAssociation:
+    Type: AWS::WAFv2::WebACLAssociation
+    DependsOn:
+      - ApiGatewayWAF
+      - ApiDeployment
+    Properties:
+      ResourceArn: !Sub "arn:aws:apigateway:${AWS::Region}::/restapis/${RestApi}/stages/${Stage}"
+      WebACLArn: !GetAtt ApiGatewayWAF.Arn
+
+  # ==========================================
+  # API Gateway Custom Domain
+  # ==========================================
+  
+  ApiGatewayDomainName:
+    Type: AWS::ApiGateway::DomainName
+    Properties:
+      DomainName: !Ref ApiDomain
+      RegionalCertificateArn: !Ref CertificateArn
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+      SecurityPolicy: TLS_1_2
+      Tags:
+        - Key: Name
+          Value: !Sub ${ClusterName}-ApiDomain
+        - Key: Type
+          Value: !Ref ClusterType
+        - Key: Environment
+          Value: !Ref ClusterEnvironment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # API Gateway Base Path Mapping
+  ApiGatewayBasePathMapping:
+    Type: AWS::ApiGateway::BasePathMapping
+    DependsOn: ApiDeployment
+    Properties:
+      DomainName: !Ref ApiGatewayDomainName
+      RestApiId: !Ref RestApi
+      Stage: !Ref Stage
+
+  # -----------------------
+  # Private S3 bucket for tenant data (per-tenant "folders" are key prefixes)
+  # -----------------------
+  PrivateDataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 
+        - "${ClusterName}-${Environment}-bucket-${ClusterIdShort}"
+        - Environment: !If 
+          - IsProduction
+          - "prod"
+          - !If 
+            - IsStaging
+            - "staging"
+            - "dev"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      Tags:
+        - Key: Name
+          Value: !Sub ${ClusterName}-PrivateDataBucket
+        - Key: Type
+          Value: !Ref ClusterType
+        - Key: Environment
+          Value: !Ref ClusterEnvironment
+        - Key: ManagedBy
+          Value: CloudFormation
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  # -----------------------
+  # Dead Letter Queue for failed jobs
+  # -----------------------
+  AppDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 
+        - "${ClusterName}-${Environment}-deadletter-${ClusterIdShort}"
+        - Environment: !If 
+          - IsProduction
+          - "prod"
+          - !If 
+            - IsStaging
+            - "staging"
+            - "dev"
+      MessageRetentionPeriod: 1209600  # 14 days
+      Tags:
+        - Key: Name
+          Value: !Sub ${ClusterName}-DeadLetterQueue
+        - Key: Type
+          Value: !Ref ClusterType
+        - Key: Environment
+          Value: !Ref ClusterEnvironment
+        - Key: ManagedBy
+          Value: CloudFormation
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  # -----------------------
+  # SQS queue with dead letter queue
+  # -----------------------
+  AppQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 
+        - "${ClusterName}-${Environment}-sqs-${ClusterIdShort}"
+        - Environment: !If 
+          - IsProduction
+          - "prod"
+          - !If 
+            - IsStaging
+            - "staging"
+            - "dev"
+      VisibilityTimeout: 120
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt AppDeadLetterQueue.Arn
+        maxReceiveCount: 3  # After 3 failed attempts, move to dead letter queue
+      Tags:
+        - Key: Name
+          Value: !Sub ${ClusterName}-AppQueue
+        - Key: Type
+          Value: !Ref ClusterType
+        - Key: Environment
+          Value: !Ref ClusterEnvironment
+        - Key: ManagedBy
+          Value: CloudFormation
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  # -----------------------
+  # REST API Gateway (required for WAF integration)
+  # -----------------------
+  RestApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub 
+        - "${ClusterName}-${Environment}-rest-api-${ClusterIdShort}"
+        - Environment: !If 
+          - IsProduction
+          - "prod"
+          - !If 
+            - IsStaging
+            - "staging"
+            - "dev"
+      Description: REST API Gateway for Laravel application with WAF protection
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+      Policy:
+        Statement:
+          - Effect: Allow
+            Principal: "*"
+            Action: execute-api:Invoke
+            Resource: "*"
+      Tags:
+        - Key: Name
+          Value: !Sub 
+            - "${ClusterName}-${Environment}-rest-api-${ClusterIdShort}"
+            - Environment: !If 
+              - IsProduction
+              - "prod"
+              - !If 
+                - IsStaging
+                - "staging"
+                - "dev"
+        - Key: Type
+          Value: !Ref ClusterType
+        - Key: Environment
+          Value: !Ref ClusterEnvironment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # API Gateway Resource for proxy
+  ApiProxyResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref RestApi
+      ParentId: !GetAtt RestApi.RootResourceId
+      PathPart: "{proxy+}"
+
+  # API Gateway Method for proxy
+  ApiProxyMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref ApiProxyResource
+      HttpMethod: ANY
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WebFunction.Arn}/invocations"
+
+  # API Gateway Method for root
+  ApiRootMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !GetAtt RestApi.RootResourceId
+      HttpMethod: ANY
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WebFunction.Arn}/invocations"
+
+  # API Gateway Deployment
+  ApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - ApiProxyMethod
+      - ApiRootMethod
+      - ApiGatewayAccount
+    Properties:
+      RestApiId: !Ref RestApi
+      StageName: !Ref Stage
+      StageDescription:
+        Description: !Sub "${Stage} stage for ${AppName} API"
+        Variables:
+          Environment: !Ref ClusterEnvironment
+        AccessLogSetting:
+          DestinationArn: !GetAtt ApiGatewayLogGroup.Arn
+          Format: '{"requestId":"$context.requestId","ip":"$context.identity.sourceIp","caller":"$context.identity.caller","user":"$context.identity.user","requestTime":"$context.requestTime","httpMethod":"$context.httpMethod","resourcePath":"$context.resourcePath","status":"$context.status","protocol":"$context.protocol","responseLength":"$context.responseLength"}'
+        MethodSettings:
+          - ResourcePath: "/*"
+            HttpMethod: "*"
+            LoggingLevel: INFO
+            DataTraceEnabled: true
+            MetricsEnabled: true
+
+  # Lambda permission for API Gateway
+  ApiGatewayLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref WebFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApi}/*/*/*"
+
+  # -----------------------
+  # Web Lambda (Laravel HTTP)
+  # Code is ALWAYS s3://<CodeBucketName>/lambda-api.zip
+  # -----------------------
+  WebFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: WebFunctionLogGroup
+    Properties:
+      FunctionName: !Sub 
+        - "${ClusterName}-${Environment}-web-${ClusterIdShort}"
+        - Environment: !If 
+          - IsProduction
+          - "prod"
+          - !If 
+            - IsStaging
+            - "staging"
+            - "dev"
+      Handler: public/index.php
+      CodeUri:
+        Bucket: !Ref CodeBucketName
+        Key: lambda-api.zip
+      # No events - API Gateway will invoke directly
+      Policies:
+        - Statement:
+            # App can enqueue jobs
+            - Effect: Allow
+              Action:
+                - sqs:SendMessage
+                - sqs:GetQueueAttributes
+              Resource: !GetAtt AppQueue.Arn
+            # App can read/write tenant private data
+            - Effect: Allow
+              Action: s3:ListBucket
+              Resource: !GetAtt PrivateDataBucket.Arn
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+                - s3:DeleteObject
+              Resource: !Sub "${PrivateDataBucket.Arn}/*"
+
+  # -----------------------
+  # Worker Lambda (SQS consumer; artisan handler)
+  # Code is ALWAYS s3://<CodeBucketName>/lambda-api.zip
+  # -----------------------
+  WorkerFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: WorkerFunctionLogGroup
+    Properties:
+      FunctionName: !Sub 
+        - "${ClusterName}-${Environment}-worker-${ClusterIdShort}"
+        - Environment: !If 
+          - IsProduction
+          - "prod"
+          - !If 
+            - IsStaging
+            - "staging"
+            - "dev"
+      Handler: artisan
+      CodeUri:
+        Bucket: !Ref CodeBucketName
+        Key: lambda-api.zip
+      Timeout: 120
+      Events:
+        QueueEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt AppQueue.Arn
+            BatchSize: 10
+            Enabled: true
+      Policies:
+        - Statement:
+            # Worker consumes SQS
+            - Effect: Allow
+              Action:
+                - sqs:ReceiveMessage
+                - sqs:DeleteMessage
+                - sqs:GetQueueAttributes
+                - sqs:ChangeMessageVisibility
+              Resource: !GetAtt AppQueue.Arn
+            # Worker may also write reports to S3
+            - Effect: Allow
+              Action: s3:ListBucket
+              Resource: !GetAtt PrivateDataBucket.Arn
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+                - s3:DeleteObject
+              Resource: !Sub "${PrivateDataBucket.Arn}/*"
+
+  # -----------------------
+  # EventBridge Scheduler -> SQS (enqueue schedule tick message)
+  # -----------------------
+  SchedulerToSqsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      # Let CloudFormation auto-generate unique role name
+      # RoleName: !Sub "${AppName}-scheduler-to-sqs-${Stage}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: scheduler.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: SendMessageToQueue
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: sqs:SendMessage
+                Resource: !GetAtt AppQueue.Arn
+      Tags:
+        - Key: Name
+          Value: !Sub ${ClusterName}-SchedulerRole
+        - Key: Type
+          Value: !Ref ClusterType
+        - Key: Environment
+          Value: !Ref ClusterEnvironment
+        - Key: ManagedBy
+          Value: CloudFormation
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  EnqueueSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: !Sub 
+        - "${ClusterName}-${Environment}-scheduler-${ClusterIdShort}"
+        - Environment: !If 
+          - IsProduction
+          - "prod"
+          - !If 
+            - IsStaging
+            - "staging"
+            - "dev"
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      ScheduleExpression: "rate(5 minutes)"
+      Target:
+        Arn: !GetAtt AppQueue.Arn
+        RoleArn: !GetAtt SchedulerToSqsRole.Arn
+        Input: |
+          {"type":"artisan","command":"schedule:run"}
+
+  # -----------------------
+  # Artisan Lambda (Laravel CLI commands)
+  # Code is ALWAYS s3://<CodeBucketName>/lambda-api.zip
+  # -----------------------
+  ArtisanFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: ArtisanFunctionLogGroup
+    Properties:
+      FunctionName: !Sub 
+        - "${ClusterName}-${Environment}-artisan-${ClusterIdShort}"
+        - Environment: !If 
+          - IsProduction
+          - "prod"
+          - !If 
+            - IsStaging
+            - "staging"
+            - "dev"
+      Handler: artisan
+      CodeUri:
+        Bucket: !Ref CodeBucketName
+        Key: lambda-api.zip
+      Timeout: 120
+      # No events - this function is invoked manually or via other services
+      Policies:
+        - Statement:
+            # Artisan may need to read/write application data
+            - Effect: Allow
+              Action: s3:ListBucket
+              Resource: !GetAtt PrivateDataBucket.Arn
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+                - s3:DeleteObject
+              Resource: !Sub "${PrivateDataBucket.Arn}/*"
+            # Artisan may need to interact with SQS for queue management
+            - Effect: Allow
+              Action:
+                - sqs:SendMessage
+                - sqs:GetQueueAttributes
+                - sqs:PurgeQueue
+              Resource: !GetAtt AppQueue.Arn
+
+Outputs:
+  # API Gateway Outputs
+  ApiUrl:
+    Description: Custom API domain URL
+    Value: !Sub "https://${ApiDomain}/"
+    Export:
+      Name: !Sub ${EnvironmentName}-ApiUrl
+
+  ApiGatewayDomainName:
+    Description: API Gateway custom domain name
+    Value: !Ref ApiDomain
+    Export:
+      Name: !Sub ${EnvironmentName}-ApiGatewayDomainName
+
+  ApiGatewayRegionalDomainName:
+    Description: API Gateway regional domain name (for DNS CNAME)
+    Value: !GetAtt ApiGatewayDomainName.RegionalDomainName
+    Export:
+      Name: !Sub ${EnvironmentName}-ApiGatewayRegionalDomainName
+
+  # Lambda Function Outputs
+  WebFunctionName:
+    Description: Lambda function name (web)
+    Value: !Ref WebFunction
+    Export:
+      Name: !Sub ${EnvironmentName}-WebFunctionName
+
+  WorkerFunctionName:
+    Description: Lambda function name (worker)
+    Value: !Ref WorkerFunction
+    Export:
+      Name: !Sub ${EnvironmentName}-WorkerFunctionName
+
+  ArtisanFunctionName:
+    Description: Lambda function name (artisan)
+    Value: !Ref ArtisanFunction
+    Export:
+      Name: !Sub ${EnvironmentName}-ArtisanFunctionName
+
+  # SQS Outputs
+  QueueUrl:
+    Description: SQS queue URL
+    Value: !Ref AppQueue
+    Export:
+      Name: !Sub ${EnvironmentName}-QueueUrl
+
+  QueueArn:
+    Description: SQS queue ARN
+    Value: !GetAtt AppQueue.Arn
+    Export:
+      Name: !Sub ${EnvironmentName}-QueueArn
+
+  DeadLetterQueueUrl:
+    Description: Dead letter queue URL
+    Value: !Ref AppDeadLetterQueue
+    Export:
+      Name: !Sub ${EnvironmentName}-DeadLetterQueueUrl
+
+  DeadLetterQueueArn:
+    Description: Dead letter queue ARN
+    Value: !GetAtt AppDeadLetterQueue.Arn
+    Export:
+      Name: !Sub ${EnvironmentName}-DeadLetterQueueArn
+
+  # S3 Outputs
+  PrivateBucketName:
+    Description: Private data bucket name
+    Value: !Ref PrivateDataBucket
+    Export:
+      Name: !Sub ${EnvironmentName}-PrivateBucketName
+
+  # IAM Outputs
+  SchedulerRoleArn:
+    Description: EventBridge Scheduler role ARN
+    Value: !GetAtt SchedulerToSqsRole.Arn
+    Export:
+      Name: !Sub ${EnvironmentName}-SchedulerRoleArn
+
+  # Utility Outputs
+  SqsPrefix:
+    Description: SQS URL prefix for Laravel configuration
+    Value: !Sub "https://sqs.${AWS::Region}.amazonaws.com/${AWS::AccountId}"
+    Export:
+      Name: !Sub ${EnvironmentName}-SqsPrefix
+
+  # WAF Outputs
+  ApiGatewayWAFId:
+    Description: Regional WAF Web ACL ID for API Gateway
+    Value: !Ref ApiGatewayWAF
+    Export:
+      Name: !Sub ${EnvironmentName}-ApiGatewayWAFId
+
+  ApiGatewayWAFArn:
+    Description: Regional WAF Web ACL ARN for API Gateway
+    Value: !GetAtt ApiGatewayWAF.Arn
+    Export:
+      Name: !Sub ${EnvironmentName}-ApiGatewayWAFArn
+
+  # Template metadata
+  TemplateVersion:
+    Description: CloudFormation template version
+    Value: "1.0.0"
+
+  DeploymentArchitecture:
+    Description: Deployment architecture used
+    Value: "Serverless Laravel (Bref + API Gateway + SQS + EventBridge)"

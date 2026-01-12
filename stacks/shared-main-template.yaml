@@ -1,0 +1,578 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Main shared cluster template that orchestrates infrastructure and database deployment
+  using nested CloudFormation stacks. This keeps individual templates small
+  while deploying everything together as a single unit.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Environment Configuration"
+        Parameters:
+          - EnvironmentName
+      - Label:
+          default: "Network Configuration"
+        Parameters:
+          - VpcCIDR
+          - AvailabilityZoneCount
+      - Label:
+          default: "Private App Zone Subnets"
+        Parameters:
+          - PrivateAppSubnet1CIDR
+          - PrivateAppSubnet2CIDR
+          - PrivateAppSubnet3CIDR
+      - Label:
+          default: "Private DB Zone Subnets"
+        Parameters:
+          - PrivateDBSubnet1CIDR
+          - PrivateDBSubnet2CIDR
+          - PrivateDBSubnet3CIDR
+      - Label:
+          default: "Database Configuration"
+        Parameters:
+          - DatabaseName
+          - MinCapacity
+          - MaxCapacity
+          - BackupRetentionPeriod
+          - PreferredBackupWindow
+          - PreferredMaintenanceWindow
+          - DeletionProtection
+      - Label:
+          default: "Template Configuration"
+        Parameters:
+          - TemplateS3Bucket
+          - TemplateS3KeyPrefix
+      - Label:
+          default: "Resource Tagging"
+        Parameters:
+          - ProjectName
+          - CostCenter
+          - Owner
+    ParameterLabels:
+      EnvironmentName:
+        default: "Environment Name"
+      VpcCIDR:
+        default: "VPC CIDR Block"
+      AvailabilityZoneCount:
+        default: "Number of Availability Zones"
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Description: Environment identifier (e.g., prod, staging, dev)
+    MinLength: 1
+    MaxLength: 50
+    AllowedPattern: ^[a-zA-Z][a-zA-Z0-9-]*$
+    ConstraintDescription: Must begin with a letter and contain only alphanumeric characters and hyphens
+
+  VpcCIDR:
+    Type: String
+    Description: CIDR block for the VPC
+    Default: 10.0.0.0/16
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be a valid CIDR block in the format x.x.x.x/x
+
+  AvailabilityZoneCount:
+    Type: Number
+    Description: Number of Availability Zones to use (2 or 3)
+    Default: 2
+    AllowedValues:
+      - 2
+      - 3
+    ConstraintDescription: Must be 2 or 3
+
+  PrivateAppSubnet1CIDR:
+    Type: String
+    Description: CIDR block for Private App Subnet in Availability Zone 1
+    Default: 10.0.1.0/24
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be a valid CIDR block in the format x.x.x.x/x
+
+  PrivateAppSubnet2CIDR:
+    Type: String
+    Description: CIDR block for Private App Subnet in Availability Zone 2
+    Default: 10.0.2.0/24
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be a valid CIDR block in the format x.x.x.x/x
+
+  PrivateAppSubnet3CIDR:
+    Type: String
+    Description: CIDR block for Private App Subnet in Availability Zone 3
+    Default: 10.0.3.0/24
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be a valid CIDR block in the format x.x.x.x/x
+
+  PrivateDBSubnet1CIDR:
+    Type: String
+    Description: CIDR block for Private DB Subnet in Availability Zone 1
+    Default: 10.0.11.0/24
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be a valid CIDR block in the format x.x.x.x/x
+
+  PrivateDBSubnet2CIDR:
+    Type: String
+    Description: CIDR block for Private DB Subnet in Availability Zone 2
+    Default: 10.0.12.0/24
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be a valid CIDR block in the format x.x.x.x/x
+
+  PrivateDBSubnet3CIDR:
+    Type: String
+    Description: CIDR block for Private DB Subnet in Availability Zone 3
+    Default: 10.0.13.0/24
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be a valid CIDR block in the format x.x.x.x/x
+
+  TemplateS3Bucket:
+    Type: String
+    Description: S3 bucket containing the nested CloudFormation templates
+    MinLength: 1
+    ConstraintDescription: Must specify the S3 bucket name
+
+  TemplateS3KeyPrefix:
+    Type: String
+    Description: S3 key prefix for nested templates (optional)
+    Default: ""
+
+  ProjectName:
+    Type: String
+    Description: Optional project name for resource tagging
+    Default: ""
+    MaxLength: 100
+
+  CostCenter:
+    Type: String
+    Description: Optional cost center identifier for resource tagging
+    Default: ""
+    MaxLength: 100
+
+  Owner:
+    Type: String
+    Description: Optional owner or team name for resource tagging
+    Default: ""
+    MaxLength: 100
+
+  # Application Configuration
+  CodeBucketName:
+    Type: String
+    Description: S3 bucket name containing lambda-api.zip (from cluster code_bucket field)
+    MinLength: 1
+    ConstraintDescription: Must specify the code bucket name
+
+  AppName:
+    Type: String
+    Default: flowrix
+    Description: Application name for resource naming
+
+  Stage:
+    Type: String
+    Default: prod
+    Description: Deployment stage (prod, staging, dev)
+
+  QueueName:
+    Type: String
+    Default: prod-sqs
+    Description: SQS queue name for Laravel job processing
+
+  # Bref Layer Configuration
+  BrefLayerArn:
+    Type: String
+    Description: Bref PHP layer ARN for the deployment region
+    MinLength: 1
+    ConstraintDescription: Must specify the Bref PHP layer ARN
+
+  # API Domain Configuration
+  ApiDomain:
+    Type: String
+    Description: Custom API domain name (e.g., tenant1.au.myapp.com)
+    MinLength: 1
+    ConstraintDescription: Must specify the API domain name
+
+  CertificateArn:
+    Type: String
+    Description: ACM certificate ARN for the API domain
+    MinLength: 1
+    ConstraintDescription: Must specify the ACM certificate ARN
+
+  # Cluster-specific parameters for tagging
+  ClusterName:
+    Type: String
+    Description: Name of the cluster for resource tagging
+    MinLength: 1
+    MaxLength: 255
+
+  ClusterType:
+    Type: String
+    Description: Type of cluster (Shared or Dedicated) for resource tagging
+    AllowedValues:
+      - Shared
+      - Dedicated
+    ConstraintDescription: Must be either Shared or Dedicated
+
+  ClusterEnvironment:
+    Type: String
+    Description: Environment of cluster (Production, Staging, or Dev) for resource tagging
+    AllowedValues:
+      - Production
+      - Staging
+      - Dev
+    ConstraintDescription: Must be Production, Staging, or Dev
+
+  ClusterIdShort:
+    Type: String
+    Description: Short cluster ID (first 8 characters) for resource naming
+    MinLength: 8
+    MaxLength: 8
+    AllowedPattern: ^[a-f0-9]{8}$
+    ConstraintDescription: Must be exactly 8 lowercase hexadecimal characters
+
+  # Database Configuration
+  DatabaseName:
+    Type: String
+    Description: Default database name to create
+    Default: appdb
+    MinLength: 1
+    MaxLength: 64
+    AllowedPattern: ^[a-zA-Z][a-zA-Z0-9_]*$
+    ConstraintDescription: Must begin with a letter and contain only alphanumeric characters and underscores
+
+  MinCapacity:
+    Type: Number
+    Description: Minimum Aurora Capacity Units (ACU) for serverless v2
+    Default: 0.5
+    MinValue: 0.5
+    MaxValue: 128
+    ConstraintDescription: Must be between 0.5 and 128
+
+  MaxCapacity:
+    Type: Number
+    Description: Maximum Aurora Capacity Units (ACU) for serverless v2
+    Default: 128
+    MinValue: 0.5
+    MaxValue: 128
+    ConstraintDescription: Must be between 0.5 and 128
+
+  BackupRetentionPeriod:
+    Type: Number
+    Description: Number of days to retain automated backups
+    Default: 7
+    MinValue: 1
+    MaxValue: 35
+    ConstraintDescription: Must be between 1 and 35 days
+
+  PreferredBackupWindow:
+    Type: String
+    Description: Preferred backup window (UTC time)
+    Default: "03:00-04:00"
+    AllowedPattern: ^([0-1][0-9]|2[0-3]):[0-5][0-9]-([0-1][0-9]|2[0-3]):[0-5][0-9]$
+    ConstraintDescription: Must be in format HH:MM-HH:MM (UTC)
+
+  PreferredMaintenanceWindow:
+    Type: String
+    Description: Preferred maintenance window
+    Default: "sun:04:00-sun:05:00"
+    AllowedPattern: ^(sun|mon|tue|wed|thu|fri|sat):[0-2][0-9]:[0-5][0-9]-(sun|mon|tue|wed|thu|fri|sat):[0-2][0-9]:[0-5][0-9]$
+    ConstraintDescription: Must be in format ddd:HH:MM-ddd:HH:MM
+
+  DeletionProtection:
+    Type: String
+    Description: Enable deletion protection for Aurora cluster
+    Default: "false"
+    AllowedValues:
+      - "true"
+      - "false"
+    ConstraintDescription: Must be true or false
+
+Conditions:
+  # Condition to determine if we should use Availability Zone 3
+  UseAZ3: !Equals [!Ref AvailabilityZoneCount, 3]
+  
+  # Conditions for optional custom tags
+  HasProjectName: !Not [!Equals [!Ref ProjectName, '']]
+  HasCostCenter: !Not [!Equals [!Ref CostCenter, '']]
+  HasOwner: !Not [!Equals [!Ref Owner, '']]
+  
+  # Condition for S3 key prefix
+  HasTemplatePrefix: !Not [!Equals [!Ref TemplateS3KeyPrefix, '']]
+
+Resources:
+  # ==========================================
+  # Infrastructure Nested Stack (VPC, subnets, security groups)
+  # ==========================================
+  
+  InfrastructureStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub
+        - 'https://${TemplateS3Bucket}.s3.${AWS::Region}.amazonaws.com/${Prefix}shared-infrastructure-template.yaml'
+        - Prefix: !If [HasTemplatePrefix, !Sub '${TemplateS3KeyPrefix}/', '']
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        VpcCIDR: !Ref VpcCIDR
+        AvailabilityZoneCount: !Ref AvailabilityZoneCount
+        PrivateAppSubnet1CIDR: !Ref PrivateAppSubnet1CIDR
+        PrivateAppSubnet2CIDR: !Ref PrivateAppSubnet2CIDR
+        PrivateAppSubnet3CIDR: !Ref PrivateAppSubnet3CIDR
+        PrivateDBSubnet1CIDR: !Ref PrivateDBSubnet1CIDR
+        PrivateDBSubnet2CIDR: !Ref PrivateDBSubnet2CIDR
+        PrivateDBSubnet3CIDR: !Ref PrivateDBSubnet3CIDR
+        ProjectName: !Ref ProjectName
+        CostCenter: !Ref CostCenter
+        Owner: !Ref Owner
+        ClusterName: !Ref ClusterName
+        ClusterType: !Ref ClusterType
+        ClusterEnvironment: !Ref ClusterEnvironment
+        ClusterIdShort: !Ref ClusterIdShort
+      Tags:
+        - Key: Name
+          Value: !Sub ${ClusterName}-Infrastructure
+        - Key: Type
+          Value: !Ref ClusterType
+        - Key: Environment
+          Value: !Ref ClusterEnvironment
+        - Key: StackType
+          Value: Infrastructure
+        - Key: ManagedBy
+          Value: CloudFormation
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  # ==========================================
+  # Database Nested Stack (depends on infrastructure)
+  # ==========================================
+  
+  DatabaseStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: InfrastructureStack
+    Properties:
+      TemplateURL: !Sub
+        - 'https://${TemplateS3Bucket}.s3.${AWS::Region}.amazonaws.com/${Prefix}shared-database-template.yaml'
+        - Prefix: !If [HasTemplatePrefix, !Sub '${TemplateS3KeyPrefix}/', '']
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        DatabaseName: !Ref DatabaseName
+        MinCapacity: !Ref MinCapacity
+        MaxCapacity: !Ref MaxCapacity
+        BackupRetentionPeriod: !Ref BackupRetentionPeriod
+        PreferredBackupWindow: !Ref PreferredBackupWindow
+        PreferredMaintenanceWindow: !Ref PreferredMaintenanceWindow
+        DeletionProtection: !Ref DeletionProtection
+        ProjectName: !Ref ProjectName
+        CostCenter: !Ref CostCenter
+        Owner: !Ref Owner
+        ClusterName: !Ref ClusterName
+        ClusterType: !Ref ClusterType
+        ClusterEnvironment: !Ref ClusterEnvironment
+        ClusterIdShort: !Ref ClusterIdShort
+      Tags:
+        - Key: Name
+          Value: !Sub ${ClusterName}-Database
+        - Key: Type
+          Value: !Ref ClusterType
+        - Key: Environment
+          Value: !Ref ClusterEnvironment
+        - Key: StackType
+          Value: Database
+        - Key: ManagedBy
+          Value: CloudFormation
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  # ==========================================
+  # Application Nested Stack (depends on database)
+  # ==========================================
+  
+  ApplicationStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: DatabaseStack
+    Properties:
+      TemplateURL: !Sub
+        - 'https://${TemplateS3Bucket}.s3.${AWS::Region}.amazonaws.com/${Prefix}shared-app-template.yaml'
+        - Prefix: !If [HasTemplatePrefix, !Sub '${TemplateS3KeyPrefix}/', '']
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        CodeBucketName: !Ref CodeBucketName
+        AppName: !Ref AppName
+        Stage: !Ref Stage
+        QueueName: !Ref QueueName
+        BrefLayerArn: !Ref BrefLayerArn
+        ApiDomain: !Ref ApiDomain
+        CertificateArn: !Ref CertificateArn
+        ProjectName: !Ref ProjectName
+        CostCenter: !Ref CostCenter
+        Owner: !Ref Owner
+        ClusterName: !Ref ClusterName
+        ClusterType: !Ref ClusterType
+        ClusterEnvironment: !Ref ClusterEnvironment
+        ClusterIdShort: !Ref ClusterIdShort
+      Tags:
+        - Key: Name
+          Value: !Sub ${ClusterName}-Application
+        - Key: Type
+          Value: !Ref ClusterType
+        - Key: Environment
+          Value: !Ref ClusterEnvironment
+        - Key: StackType
+          Value: Application
+        - Key: ManagedBy
+          Value: CloudFormation
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+Outputs:
+  # Main Stack Outputs
+  MainStackId:
+    Description: Main cluster stack ID
+    Value: !Ref AWS::StackId
+
+  InfrastructureStackId:
+    Description: Infrastructure nested stack ID
+    Value: !Ref InfrastructureStack
+
+  DatabaseStackId:
+    Description: Database nested stack ID
+    Value: !Ref DatabaseStack
+
+  ApplicationStackId:
+    Description: Application nested stack ID
+    Value: !Ref ApplicationStack
+
+  EdgeStackId:
+    Description: Edge stack (removed - using direct API Gateway)
+    Value: "N/A"
+
+  # Infrastructure Outputs (passed through from nested stack)
+  VPC:
+    Description: VPC ID
+    Value: !GetAtt InfrastructureStack.Outputs.VPC
+
+  PrivateAppSubnets:
+    Description: Private app subnet IDs
+    Value: !GetAtt InfrastructureStack.Outputs.PrivateAppSubnets
+
+  PrivateDBSubnets:
+    Description: Private database subnet IDs
+    Value: !GetAtt InfrastructureStack.Outputs.PrivateDBSubnets
+
+  LambdaSecurityGroup:
+    Description: Security group for Lambda functions
+    Value: !GetAtt InfrastructureStack.Outputs.LambdaSecurityGroup
+
+  DatabaseSecurityGroup:
+    Description: Security group for database resources
+    Value: !GetAtt InfrastructureStack.Outputs.DBSecurityGroup
+
+  # Application Outputs (passed through from nested stack)
+  ApiUrl:
+    Description: HTTP API endpoint
+    Value: !GetAtt ApplicationStack.Outputs.ApiUrl
+
+  WebFunctionName:
+    Description: Lambda function name (web)
+    Value: !GetAtt ApplicationStack.Outputs.WebFunctionName
+
+  WorkerFunctionName:
+    Description: Lambda function name (worker)
+    Value: !GetAtt ApplicationStack.Outputs.WorkerFunctionName
+
+  ArtisanFunctionName:
+    Description: Lambda function name (artisan)
+    Value: !GetAtt ApplicationStack.Outputs.ArtisanFunctionName
+
+  QueueUrl:
+    Description: SQS queue URL
+    Value: !GetAtt ApplicationStack.Outputs.QueueUrl
+
+  PrivateBucketName:
+    Description: Private data bucket name
+    Value: !GetAtt ApplicationStack.Outputs.PrivateBucketName
+
+  ApiGatewayWAFArn:
+    Description: Regional WAF Web ACL ARN protecting API Gateway
+    Value: !GetAtt ApplicationStack.Outputs.ApiGatewayWAFArn
+
+  # Database Outputs (passed through from nested stack)
+  AuroraClusterEndpoint:
+    Description: Aurora MySQL cluster endpoint
+    Value: !GetAtt DatabaseStack.Outputs.AuroraClusterEndpoint
+
+  AuroraClusterReadEndpoint:
+    Description: Aurora MySQL cluster read endpoint
+    Value: !GetAtt DatabaseStack.Outputs.AuroraClusterReadEndpoint
+
+  AuroraClusterPort:
+    Description: Aurora MySQL cluster port
+    Value: !GetAtt DatabaseStack.Outputs.AuroraClusterPort
+
+  DBProxyEndpoint:
+    Description: RDS Proxy endpoint for connection pooling
+    Value: !GetAtt DatabaseStack.Outputs.DBProxyEndpoint
+
+  DBSecretArn:
+    Description: ARN of the database password secret (AWS managed)
+    Value: !GetAtt DatabaseStack.Outputs.DBSecretArn
+
+  DatabaseName:
+    Description: Default database name
+    Value: !GetAtt DatabaseStack.Outputs.DatabaseName
+
+  # Redis Outputs (passed through from database stack)
+  RedisEndpoint:
+    Description: ElastiCache Serverless Redis endpoint
+    Value: !GetAtt DatabaseStack.Outputs.RedisEndpoint
+
+  RedisPort:
+    Description: ElastiCache Serverless Redis port
+    Value: !GetAtt DatabaseStack.Outputs.RedisPort
+
+  # Edge stack removed - using direct API Gateway with custom domain
+
+  # Template metadata
+  TemplateVersion:
+    Description: CloudFormation template version
+    Value: "1.0.0"
+
+  DeploymentArchitecture:
+    Description: Deployment architecture used
+    Value: "Nested Stacks (Infrastructure + Database + Application)"

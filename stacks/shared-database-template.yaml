@@ -168,15 +168,15 @@ Conditions:
 
 Resources:
   # ==========================================
-  # IAM Roles for RDS DB Connect Authentication
+  # Security Groups for RDS Proxy and Aurora
   # ==========================================
   
-  # IAM Role for Lambda functions to connect to RDS via IAM authentication
-  LambdaRDSConnectRole:
-    Type: AWS::IAM::Role
+  # RDS Proxy Security Group
+  RDSProxySecurityGroup:
+    Type: AWS::EC2::SecurityGroup
     Properties:
-      RoleName: !Sub 
-        - "${ClusterName}-${Environment}-lambda-rds-connect-${ClusterIdShort}"
+      GroupName: !Sub 
+        - "${ClusterName}-${Environment}-rdsproxy-sg-${ClusterIdShort}"
         - Environment: !If 
           - IsProduction
           - 'prod'
@@ -184,37 +184,25 @@ Resources:
             - IsStaging
             - 'staging'
             - 'dev'
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
-      Policies:
-        - PolicyName: RDSDBConnectPolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - rds-db:connect
-                Resource: 
-                  - !Sub 'arn:aws:rds-db:${AWS::Region}:${AWS::AccountId}:dbuser:${AuroraCluster}/lambda_user'
-                  - !Sub 'arn:aws:rds-db:${AWS::Region}:${AWS::AccountId}:dbuser:*/lambda_user'
+      GroupDescription: Security group for RDS Proxy
+      VpcId: !ImportValue
+        'Fn::Sub': '${EnvironmentName}-VPC'
+      SecurityGroupIngress:
+        # Allow MySQL access from Lambda Security Group
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !ImportValue
+            'Fn::Sub': '${EnvironmentName}-LambdaSecurityGroup'
+          Description: Allow MySQL from Lambda Security Group
+      SecurityGroupEgress:
+        # Allow all outbound traffic
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic
       Tags:
         - Key: Name
-          Value: !Sub 
-            - "${ClusterName}-${Environment}-lambda-rds-connect-${ClusterIdShort}"
-            - Environment: !If 
-              - IsProduction
-              - 'prod'
-              - !If 
-                - IsStaging
-                - 'staging'
-                - 'dev'
+          Value: !Sub ${EnvironmentName}-RDSProxySecurityGroup
         - Key: Type
           Value: !Ref ClusterType
         - Key: Environment
@@ -237,12 +225,12 @@ Resources:
             Value: !Ref Owner
           - !Ref AWS::NoValue
 
-  # IAM Role for DB Proxy to connect to RDS via IAM authentication
-  DBProxyRDSConnectRole:
-    Type: AWS::IAM::Role
+  # Aurora MySQL Security Group
+  AuroraSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
     Properties:
-      RoleName: !Sub 
-        - "${ClusterName}-${Environment}-dbproxy-rds-connect-${ClusterIdShort}"
+      GroupName: !Sub 
+        - "${ClusterName}-${Environment}-aurora-sg-${ClusterIdShort}"
         - Environment: !If 
           - IsProduction
           - 'prod'
@@ -250,46 +238,24 @@ Resources:
             - IsStaging
             - 'staging'
             - 'dev'
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: rds.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: RDSDBConnectPolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - rds-db:connect
-                Resource: 
-                  - !Sub 'arn:aws:rds-db:${AWS::Region}:${AWS::AccountId}:dbuser:${AuroraCluster}/proxy_user'
-                  - !Sub 'arn:aws:rds-db:${AWS::Region}:${AWS::AccountId}:dbuser:*/proxy_user'
-        - PolicyName: SecretsManagerAccess
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - secretsmanager:GetSecretValue
-                  - secretsmanager:DescribeSecret
-                Resource: 
-                  - !GetAtt AuroraCluster.MasterUserSecret.SecretArn
-                  - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:rds-db-credentials/*'
+      GroupDescription: Security group for Aurora MySQL cluster
+      VpcId: !ImportValue
+        'Fn::Sub': '${EnvironmentName}-VPC'
+      SecurityGroupIngress:
+        # Allow MySQL access from RDS Proxy Security Group
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref RDSProxySecurityGroup
+          Description: Allow MySQL from RDS Proxy Security Group
+      SecurityGroupEgress:
+        # Allow all outbound traffic
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: Allow all outbound traffic
       Tags:
         - Key: Name
-          Value: !Sub 
-            - "${ClusterName}-${Environment}-dbproxy-rds-connect-${ClusterIdShort}"
-            - Environment: !If 
-              - IsProduction
-              - 'prod'
-              - !If 
-                - IsStaging
-                - 'staging'
-                - 'dev'
+          Value: !Sub ${EnvironmentName}-AuroraSecurityGroup
         - Key: Type
           Value: !Ref ClusterType
         - Key: Environment
@@ -386,8 +352,7 @@ Resources:
       DatabaseName: !Ref DatabaseName
       DBSubnetGroupName: !Ref DBSubnetGroup
       VpcSecurityGroupIds:
-        - !ImportValue
-          'Fn::Sub': '${EnvironmentName}-RDSSecurityGroup'
+        - !Ref AuroraSecurityGroup
       BackupRetentionPeriod: !Ref BackupRetentionPeriod
       PreferredBackupWindow: !Ref PreferredBackupWindow
       PreferredMaintenanceWindow: !Ref PreferredMaintenanceWindow
@@ -468,7 +433,55 @@ Resources:
             Value: !Ref Owner
           - !Ref AWS::NoValue
 
-  # RDS Proxy for Connection Pooling with IAM Authentication
+  # RDS Proxy for Connection Pooling
+  DBProxyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${EnvironmentName}-rds-proxy-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: rds.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: SecretsManagerAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:DescribeSecret
+                Resource: 
+                  - !GetAtt AuroraCluster.MasterUserSecret.SecretArn
+                  - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:rds-db-credentials/*'
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-rds-proxy-role
+        - Key: Type
+          Value: !Ref ClusterType
+        - Key: Environment
+          Value: !Ref ClusterEnvironment
+        - Key: ManagedBy
+          Value: CloudFormation
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
   DBProxy:
     Type: AWS::RDS::DBProxy
     DeletionPolicy: Delete
@@ -488,15 +501,14 @@ Resources:
       Auth:
         - AuthScheme: SECRETS
           SecretArn: !GetAtt AuroraCluster.MasterUserSecret.SecretArn
-      RoleArn: !GetAtt DBProxyRDSConnectRole.Arn
+      RoleArn: !GetAtt DBProxyRole.Arn
       VpcSubnetIds: !Split
         - ','
         - !ImportValue
           'Fn::Sub': '${EnvironmentName}-PrivateDBSubnets'
       VpcSecurityGroupIds:
-        - !ImportValue
-          'Fn::Sub': '${EnvironmentName}-DBProxySecurityGroup'
-      RequireTLS: true
+        - !Ref RDSProxySecurityGroup
+      RequireTLS: false
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-aurora-proxy
@@ -586,6 +598,7 @@ Resources:
     Type: AWS::ElastiCache::ServerlessCache
     DependsOn:
       - RedisSubnetGroup
+      - AuroraSecurityGroup
     Properties:
       ServerlessCacheName: !Sub 
         - "${ClusterName}-${Environment}-redis-cache-${ClusterIdShort}"
@@ -604,8 +617,7 @@ Resources:
         - !ImportValue
           'Fn::Sub': '${EnvironmentName}-PrivateDBSubnets'
       SecurityGroupIds:
-        - !ImportValue
-          'Fn::Sub': '${EnvironmentName}-RedisSecurityGroup'
+        - !Ref AuroraSecurityGroup
       DailySnapshotTime: "03:30"
       SnapshotRetentionLimit: 7
       Tags:
@@ -700,16 +712,3 @@ Outputs:
   TemplateVersion:
     Description: CloudFormation template version
     Value: "1.0.0"
-
-  # IAM Role Outputs
-  LambdaRDSConnectRoleArn:
-    Description: ARN of the Lambda RDS Connect IAM role
-    Value: !GetAtt LambdaRDSConnectRole.Arn
-    Export:
-      Name: !Sub ${EnvironmentName}-LambdaRDSConnectRoleArn
-
-  DBProxyRDSConnectRoleArn:
-    Description: ARN of the DB Proxy RDS Connect IAM role
-    Value: !GetAtt DBProxyRDSConnectRole.Arn
-    Export:
-      Name: !Sub ${EnvironmentName}-DBProxyRDSConnectRoleArn
