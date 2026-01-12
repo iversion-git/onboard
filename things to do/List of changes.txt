@@ -1,0 +1,10 @@
+Nat gateway need to be in the public subnet
+
+We need route for public subnet to igw
+
+we need to enable IAM authentication on DB proxy with TLS
+
+We need to assign a role to DB proxy to have access to targeted rds with any user using IAM authentication
+
+We need to add IAM authentication permission on AWS Lambda role to allow access to DB Proxy using IAM auth
+
