@@ -313,9 +313,6 @@ Resources:
           - !Ref AWS::NoValue
 
   # ==========================================
-  # Security Groups for RDS Proxy and Aurora
-  # ==========================================
-  # ==========================================
   # Aurora MySQL Serverless v2 Database
   # ==========================================
   
@@ -595,7 +592,6 @@ Resources:
     Type: AWS::ElastiCache::ServerlessCache
     DependsOn:
       - RedisSubnetGroup
-      - AuroraSecurityGroup
     Properties:
       ServerlessCacheName: !Sub 
         - "${ClusterName}-${Environment}-redis-cache-${ClusterIdShort}"
