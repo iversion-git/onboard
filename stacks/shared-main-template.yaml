@@ -30,6 +30,12 @@ Metadata:
           - PrivateDBSubnet2CIDR
           - PrivateDBSubnet3CIDR
       - Label:
+          default: "Public Zone Subnets"
+        Parameters:
+          - PublicSubnet1CIDR
+          - PublicSubnet2CIDR
+          - PublicSubnet3CIDR
+      - Label:
           default: "Database Configuration"
         Parameters:
           - DatabaseName
@@ -122,6 +128,27 @@ Parameters:
     Type: String
     Description: CIDR block for Private DB Subnet in Availability Zone 3
     Default: 10.0.13.0/24
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be a valid CIDR block in the format x.x.x.x/x
+
+  PublicSubnet1CIDR:
+    Type: String
+    Description: CIDR block for Public Subnet in Availability Zone 1
+    Default: 10.0.21.0/24
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be a valid CIDR block in the format x.x.x.x/x
+
+  PublicSubnet2CIDR:
+    Type: String
+    Description: CIDR block for Public Subnet in Availability Zone 2
+    Default: 10.0.22.0/24
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
+    ConstraintDescription: Must be a valid CIDR block in the format x.x.x.x/x
+
+  PublicSubnet3CIDR:
+    Type: String
+    Description: CIDR block for Public Subnet in Availability Zone 3
+    Default: 10.0.23.0/24
     AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$
     ConstraintDescription: Must be a valid CIDR block in the format x.x.x.x/x
 
@@ -318,6 +345,9 @@ Resources:
         PrivateDBSubnet1CIDR: !Ref PrivateDBSubnet1CIDR
         PrivateDBSubnet2CIDR: !Ref PrivateDBSubnet2CIDR
         PrivateDBSubnet3CIDR: !Ref PrivateDBSubnet3CIDR
+        PublicSubnet1CIDR: !Ref PublicSubnet1CIDR
+        PublicSubnet2CIDR: !Ref PublicSubnet2CIDR
+        PublicSubnet3CIDR: !Ref PublicSubnet3CIDR
         ProjectName: !Ref ProjectName
         CostCenter: !Ref CostCenter
         Owner: !Ref Owner
@@ -495,12 +525,28 @@ Outputs:
     Description: Private database subnet IDs
     Value: !GetAtt InfrastructureStack.Outputs.PrivateDBSubnets
 
+  PublicSubnets:
+    Description: Public subnet IDs
+    Value: !GetAtt InfrastructureStack.Outputs.PublicSubnets
+
   LambdaSecurityGroup:
     Description: Security group for Lambda functions
     Value: !GetAtt InfrastructureStack.Outputs.LambdaSecurityGroup
 
+  RDSSecurityGroup:
+    Description: Security group for RDS Aurora MySQL
+    Value: !GetAtt InfrastructureStack.Outputs.RDSSecurityGroup
+
+  DBProxySecurityGroup:
+    Description: Security group for RDS Proxy
+    Value: !GetAtt InfrastructureStack.Outputs.DBProxySecurityGroup
+
+  RedisSecurityGroup:
+    Description: Security group for Redis
+    Value: !GetAtt InfrastructureStack.Outputs.RedisSecurityGroup
+
   DatabaseSecurityGroup:
-    Description: Security group for database resources
+    Description: Security group for database resources (legacy - use specific security groups)
     Value: !GetAtt InfrastructureStack.Outputs.DBSecurityGroup
 
   # Application Outputs (passed through from nested stack)
