@@ -168,6 +168,64 @@ Conditions:
 
 Resources:
   # ==========================================
+  # IAM Role for Enhanced Monitoring
+  # ==========================================
+  
+  EnhancedMonitoringRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 
+        - "${ClusterName}-${Environment}-rds-monitoring-${ClusterIdShort}"
+        - Environment: !If 
+          - IsProduction
+          - 'prod'
+          - !If 
+            - IsStaging
+            - 'staging'
+            - 'dev'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: monitoring.rds.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole
+      Tags:
+        - Key: Name
+          Value: !Sub 
+            - "${ClusterName}-${Environment}-rds-monitoring-${ClusterIdShort}"
+            - Environment: !If 
+              - IsProduction
+              - 'prod'
+              - !If 
+                - IsStaging
+                - 'staging'
+                - 'dev'
+        - Key: Type
+          Value: !Ref ClusterType
+        - Key: Environment
+          Value: !Ref ClusterEnvironment
+        - Key: ManagedBy
+          Value: CloudFormation
+        - !If
+          - HasProjectName
+          - Key: Project
+            Value: !Ref ProjectName
+          - !Ref AWS::NoValue
+        - !If
+          - HasCostCenter
+          - Key: CostCenter
+            Value: !Ref CostCenter
+          - !Ref AWS::NoValue
+        - !If
+          - HasOwner
+          - Key: Owner
+            Value: !Ref Owner
+          - !Ref AWS::NoValue
+
+  # ==========================================
   # IAM Role for DB Proxy to access Secrets Manager
   # ==========================================
   
@@ -286,7 +344,7 @@ Resources:
   # Aurora MySQL Serverless v2 Cluster
   AuroraCluster:
     Type: AWS::RDS::DBCluster
-    DeletionPolicy: Delete
+    DeletionPolicy: Retain
     DependsOn:
       - DBSubnetGroup
     Properties:
@@ -318,11 +376,13 @@ Resources:
         - error
         - general
         - slowquery
-      DeletionProtection: !If [EnableDeletionProtection, true, false]
+      DeletionProtection: true
       StorageEncrypted: true
       StorageType: aurora-iopt1
       CopyTagsToSnapshot: true
       EnableIAMDatabaseAuthentication: false
+      EnablePerformanceInsights: true
+      PerformanceInsightsRetentionPeriod: 7
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-aurora-mysql
@@ -351,7 +411,7 @@ Resources:
   # Aurora MySQL Writer Instance
   AuroraWriterInstance:
     Type: AWS::RDS::DBInstance
-    DeletionPolicy: Delete
+    DeletionPolicy: Retain
     Properties:
       DBInstanceIdentifier: !Sub 
         - "${ClusterName}-${Environment}-aurora-writer-${ClusterIdShort}"
@@ -366,6 +426,10 @@ Resources:
       DBInstanceClass: db.serverless
       Engine: aurora-mysql
       PubliclyAccessible: false
+      EnablePerformanceInsights: true
+      PerformanceInsightsRetentionPeriod: 7
+      MonitoringInterval: 60
+      MonitoringRoleArn: !GetAtt EnhancedMonitoringRole.Arn
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-aurora-writer
@@ -411,6 +475,7 @@ Resources:
       Auth:
         - AuthScheme: SECRETS
           SecretArn: !GetAtt AuroraCluster.MasterUserSecret.SecretArn
+          ClientPasswordAuthType: MYSQL_NATIVE_PASSWORD
       RoleArn: !GetAtt DBProxyRole.Arn
       VpcSubnetIds: !Split
         - ','
