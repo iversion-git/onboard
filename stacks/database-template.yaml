@@ -168,81 +168,14 @@ Conditions:
 
 Resources:
   # ==========================================
-  # IAM Roles for RDS DB Connect Authentication
+  # IAM Role for DB Proxy to access Secrets Manager
   # ==========================================
   
-  # IAM Role for Lambda functions to connect to RDS via IAM authentication
-  LambdaRDSConnectRole:
+  DBProxyRole:
     Type: AWS::IAM::Role
     Properties:
       RoleName: !Sub 
-        - "${ClusterName}-${Environment}-lambda-rds-connect-${ClusterIdShort}"
-        - Environment: !If 
-          - IsProduction
-          - 'prod'
-          - !If 
-            - IsStaging
-            - 'staging'
-            - 'dev'
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
-      Policies:
-        - PolicyName: RDSDBConnectPolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - rds-db:connect
-                Resource: 
-                  - !Sub 'arn:aws:rds-db:${AWS::Region}:${AWS::AccountId}:dbuser:${AuroraCluster}/lambda_user'
-                  - !Sub 'arn:aws:rds-db:${AWS::Region}:${AWS::AccountId}:dbuser:*/lambda_user'
-      Tags:
-        - Key: Name
-          Value: !Sub 
-            - "${ClusterName}-${Environment}-lambda-rds-connect-${ClusterIdShort}"
-            - Environment: !If 
-              - IsProduction
-              - 'prod'
-              - !If 
-                - IsStaging
-                - 'staging'
-                - 'dev'
-        - Key: Type
-          Value: !Ref ClusterType
-        - Key: Environment
-          Value: !Ref ClusterEnvironment
-        - Key: ManagedBy
-          Value: CloudFormation
-        - !If
-          - HasProjectName
-          - Key: Project
-            Value: !Ref ProjectName
-          - !Ref AWS::NoValue
-        - !If
-          - HasCostCenter
-          - Key: CostCenter
-            Value: !Ref CostCenter
-          - !Ref AWS::NoValue
-        - !If
-          - HasOwner
-          - Key: Owner
-            Value: !Ref Owner
-          - !Ref AWS::NoValue
-
-  # IAM Role for DB Proxy to connect to RDS via IAM authentication
-  DBProxyRDSConnectRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Sub 
-        - "${ClusterName}-${Environment}-dbproxy-rds-connect-${ClusterIdShort}"
+        - "${ClusterName}-${Environment}-dbproxy-role-${ClusterIdShort}"
         - Environment: !If 
           - IsProduction
           - 'prod'
@@ -258,16 +191,6 @@ Resources:
               Service: rds.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: RDSDBConnectPolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - rds-db:connect
-                Resource: 
-                  - !Sub 'arn:aws:rds-db:${AWS::Region}:${AWS::AccountId}:dbuser:${AuroraCluster}/proxy_user'
-                  - !Sub 'arn:aws:rds-db:${AWS::Region}:${AWS::AccountId}:dbuser:*/proxy_user'
         - PolicyName: SecretsManagerAccess
           PolicyDocument:
             Version: '2012-10-17'
@@ -282,7 +205,7 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub 
-            - "${ClusterName}-${Environment}-dbproxy-rds-connect-${ClusterIdShort}"
+            - "${ClusterName}-${Environment}-dbproxy-role-${ClusterIdShort}"
             - Environment: !If 
               - IsProduction
               - 'prod'
@@ -399,7 +322,7 @@ Resources:
       StorageEncrypted: true
       StorageType: aurora-iopt1
       CopyTagsToSnapshot: true
-      EnableIAMDatabaseAuthentication: true
+      EnableIAMDatabaseAuthentication: false
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-aurora-mysql
@@ -488,9 +411,7 @@ Resources:
       Auth:
         - AuthScheme: SECRETS
           SecretArn: !GetAtt AuroraCluster.MasterUserSecret.SecretArn
-          IAMAuth: REQUIRED
-      DefaultAuthenticationScheme: IAM
-      RoleArn: !GetAtt DBProxyRDSConnectRole.Arn
+      RoleArn: !GetAtt DBProxyRole.Arn
       VpcSubnetIds: !Split
         - ','
         - !ImportValue
@@ -498,7 +419,7 @@ Resources:
       VpcSecurityGroupIds:
         - !ImportValue
           'Fn::Sub': '${EnvironmentName}-DBProxySecurityGroup'
-      RequireTLS: true
+      RequireTLS: false
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName}-aurora-proxy
@@ -703,15 +624,9 @@ Outputs:
     Description: CloudFormation template version
     Value: "1.0.0"
 
-  # IAM Role Outputs
-  LambdaRDSConnectRoleArn:
-    Description: ARN of the Lambda RDS Connect IAM role
-    Value: !GetAtt LambdaRDSConnectRole.Arn
+  # IAM Role Output
+  DBProxyRoleArn:
+    Description: ARN of the DB Proxy IAM role
+    Value: !GetAtt DBProxyRole.Arn
     Export:
-      Name: !Sub ${EnvironmentName}-LambdaRDSConnectRoleArn
-
-  DBProxyRDSConnectRoleArn:
-    Description: ARN of the DB Proxy RDS Connect IAM role
-    Value: !GetAtt DBProxyRDSConnectRole.Arn
-    Export:
-      Name: !Sub ${EnvironmentName}-DBProxyRDSConnectRoleArn
+      Name: !Sub ${EnvironmentName}-DBProxyRoleArn
