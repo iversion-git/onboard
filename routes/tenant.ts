@@ -3,7 +3,7 @@ import type { InternalRouter } from '../lib/router.js';
 import { authMiddleware, requireRole } from '../middleware/auth.js';
 import { validationMiddleware } from '../middleware/validation.js';
 import { CreateTenantSchema } from '../lib/data-models.js';
-import { registerHandler, availableClustersHandler } from '../handlers/tenant/index.js';
+import { registerHandler, availableClustersHandler, listTenantsHandler } from '../handlers/tenant/index.js';
 
 export function registerTenantRoutes(router: InternalRouter): void {
   // POST /tenant/register - Create new tenant (admin/manager/user can create)
@@ -21,5 +21,12 @@ export function registerTenantRoutes(router: InternalRouter): void {
     authMiddleware(),
     requireRole(['admin', 'manager', 'user']),
     availableClustersHandler
+  );
+
+  // GET /tenant/list - List all tenants with optional filtering and search (admin/manager/user can read)
+  router.get('/tenant/list',
+    authMiddleware(),
+    requireRole(['admin', 'manager', 'user']),
+    listTenantsHandler
   );
 }

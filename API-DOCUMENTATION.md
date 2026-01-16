@@ -7,22 +7,24 @@ https://85n0x7rpf3.execute-api.ap-southeast-2.amazonaws.com/v1
 
 ## API Endpoints Summary
 
-**Total Endpoints: 20**
+**Total Endpoints: 22**
 
 ### Authentication Endpoints (3)
 - `POST /auth/login` - Staff login with JWT token generation
 - `POST /auth/password-reset/request` - Request password reset token via email
 - `POST /auth/password-reset/confirm` - Confirm password reset with token
 
-### Staff Management Endpoints (4)
+### Staff Management Endpoints (5)
 - `POST /staff/register` - Create new staff account (Admin only)
 - `POST /staff/enable` - Enable staff account (Admin only)
 - `POST /staff/disable` - Disable staff account (Admin only)
 - `GET /staff/me` - Get current authenticated staff profile
+- `GET /staff/list` - List all staff members with last login tracking (Admin only)
 
-### Tenant Management Endpoints (2)
-- `POST /tenant/register` - Register new tenant for ERP provisioning (Admin/Manager)
-- `GET /tenant/available-clusters` - Get available clusters by deployment type (Admin/Manager)
+### Tenant Management Endpoints (3)
+- `POST /tenant/register` - Register new tenant for ERP provisioning (Admin/Manager/User)
+- `GET /tenant/available-clusters` - Get available clusters by deployment type (Admin/Manager/User)
+- `GET /tenant/list` - List all tenants with filtering and search (Admin/Manager/User)
 
 ### Subscription Management Endpoints (3)
 - `POST /subscription/create` - Create new subscription for tenant (Admin/Manager)
@@ -213,7 +215,7 @@ Error responses:
 {
   "email": "newstaff@example.com",     // ✅ Required - Valid email address
   "password": "StrongPassword123!",    // ✅ Required - 8-128 characters
-  "roles": ["staff"]                   // ✅ Required - Array of: admin, manager, staff
+  "roles": ["user"]                    // ✅ Required - Array of: admin, manager, user
 }
 ```
 
@@ -224,13 +226,18 @@ Error responses:
   "data": {
     "staff_id": "550e8400-e29b-41d4-a716-446655440002",
     "email": "newstaff@example.com",
-    "roles": ["staff"],
+    "roles": ["user"],
     "enabled": true,
     "created_at": "2025-12-26T05:00:00.000Z"
   },
   "timestamp": "2025-12-26T05:00:00.000Z"
 }
 ```
+
+**Available Roles**:
+- `admin` - Full system access, can manage staff, tenants, subscriptions, and clusters
+- `manager` - Can manage tenants and subscriptions with full permissions
+- `user` - Read-only access to tenants and subscriptions, can create new tenant/subscription
 
 **Error Responses**:
 - `401 Unauthorized` - Missing or invalid JWT token
@@ -301,6 +308,75 @@ Error responses:
 - `403 Forbidden` - Insufficient permissions (not admin)
 - `404 NotFound` - Staff member not found
 - `400 ValidationError` - Invalid UUID format
+
+---
+
+### GET /staff/list
+**Description**: List all staff members for grid display with last login tracking
+
+**Authentication**: ✅ Required (Admin only)
+
+**Request Body**: None
+
+**Success Response (200)**:
+```json
+{
+  "success": true,
+  "data": {
+    "staff": [
+      {
+        "staff_id": "550e8400-e29b-41d4-a716-446655440001",
+        "full_name": "admin",
+        "email": "admin@example.com",
+        "roles": ["admin"],
+        "enabled": true,
+        "last_login": "2026-01-16T06:30:00.000Z",
+        "created_at": "2025-12-26T05:00:00.000Z"
+      },
+      {
+        "staff_id": "550e8400-e29b-41d4-a716-446655440002",
+        "full_name": "john.smith",
+        "email": "john.smith@example.com",
+        "roles": ["manager"],
+        "enabled": true,
+        "last_login": "2026-01-15T14:20:00.000Z",
+        "created_at": "2025-12-27T08:00:00.000Z"
+      },
+      {
+        "staff_id": "550e8400-e29b-41d4-a716-446655440003",
+        "full_name": "jane.doe",
+        "email": "jane.doe@example.com",
+        "roles": ["user"],
+        "enabled": false,
+        "last_login": null,
+        "created_at": "2025-12-28T10:00:00.000Z"
+      }
+    ],
+    "count": 3
+  },
+  "timestamp": "2026-01-16T07:00:00.000Z"
+}
+```
+
+**Response Fields**:
+- `staff_id` - Unique identifier for the staff member
+- `full_name` - Extracted from email (part before @), can be enhanced later
+- `email` - Staff member's email address
+- `roles` - Array of assigned roles (admin, manager, user)
+- `enabled` - Whether the account is active
+- `last_login` - ISO timestamp of last successful login (null if never logged in)
+- `created_at` - ISO timestamp when account was created
+- `count` - Total number of staff members returned
+
+**Last Login Tracking**:
+- Automatically updated on each successful login
+- Shows null for staff who have never logged in
+- Useful for identifying inactive accounts
+
+**Error Responses**:
+- `401 Unauthorized` - Missing or invalid JWT token
+- `403 Forbidden` - Insufficient permissions (not admin)
+- `500 InternalError` - Database error
 
 ---
 
@@ -401,7 +477,7 @@ Error responses:
 ### GET /tenant/available-clusters
 **Description**: Get available clusters based on deployment type
 
-**Authentication**: ✅ Required (Admin or Manager only)
+**Authentication**: ✅ Required (Admin/Manager/User)
 
 **Query Parameters**:
 - `deployment_type` (required): "Shared" or "Dedicated"
@@ -457,8 +533,133 @@ GET /tenant/available-clusters?deployment_type=Shared
 
 **Error Responses**:
 - `401 Unauthorized` - Missing or invalid JWT token
-- `403 Forbidden` - Insufficient permissions (not admin or manager)
+- `403 Forbidden` - Insufficient permissions
 - `400 ValidationError` - Invalid deployment_type parameter
+
+---
+
+### GET /tenant/list
+**Description**: List all tenants with optional filtering and search for grid display
+
+**Authentication**: ✅ Required (Admin/Manager/User)
+
+**Query Parameters** (all optional):
+- `deployment_type` - Filter by deployment type: "shared" or "dedicated"
+- `region` - Filter by region: "Australia", "US", "UK", or "Europe"
+- `search` - Search across all text fields (name, email, mobile, business_name, tenant_url, etc.)
+
+**Example Requests**:
+```
+GET /tenant/list
+GET /tenant/list?deployment_type=shared
+GET /tenant/list?region=Australia
+GET /tenant/list?search=acme
+GET /tenant/list?deployment_type=dedicated&region=US&search=corp
+```
+
+**Success Response (200)**:
+```json
+{
+  "success": true,
+  "data": {
+    "tenants": [
+      {
+        "tenant_id": "550e8400-e29b-41d4-a716-446655440003",
+        "name": "John Smith",
+        "email": "john.smith@acme.com",
+        "mobile_number": "+1-555-123-4567",
+        "business_name": "Acme Corporation",
+        "deployment_type": "Shared",
+        "region": "Australia",
+        "tenant_url": "acme-corp",
+        "status": "Active",
+        "created_at": "2025-01-07T05:00:00.000Z"
+      },
+      {
+        "tenant_id": "550e8400-e29b-41d4-a716-446655440006",
+        "name": "Jane Doe",
+        "email": "jane.doe@techcorp.com",
+        "mobile_number": "+1-555-987-6543",
+        "business_name": "Tech Corporation",
+        "deployment_type": "Dedicated",
+        "region": "US",
+        "tenant_url": "tech-corp",
+        "status": "Pending",
+        "created_at": "2025-01-08T10:00:00.000Z"
+      }
+    ],
+    "count": 2,
+    "filters": {
+      "deployment_type": null,
+      "region": null,
+      "search": null
+    }
+  },
+  "timestamp": "2026-01-16T07:00:00.000Z"
+}
+```
+
+**Response Fields**:
+- `tenants` - Array of tenant records matching the filters
+- `count` - Number of tenants returned after filtering
+- `filters` - Echo of applied filters (null if not used)
+
+**Tenant Fields**:
+- `tenant_id` - Unique identifier
+- `name` - Contact person's name
+- `email` - Contact email address
+- `mobile_number` - Contact mobile/phone number
+- `business_name` - Business or company name
+- `deployment_type` - "Shared" or "Dedicated"
+- `region` - Geographic region
+- `tenant_url` - Tenant subdomain identifier
+- `status` - Current status (Pending, Active, Suspended, Terminated)
+- `created_at` - ISO timestamp when tenant was created
+
+**Filtering Options**:
+
+1. **Deployment Type Filter**:
+   - Values: "shared" or "dedicated" (case-insensitive)
+   - Filters tenants by their infrastructure deployment type
+   - Example: `?deployment_type=shared`
+
+2. **Region Filter**:
+   - Values: "Australia", "US", "UK", "Europe" (case-insensitive)
+   - Filters tenants by their geographic region
+   - Example: `?region=Australia`
+
+3. **Search Filter**:
+   - Searches across all text fields:
+     - name (contact person)
+     - email
+     - mobile_number
+     - business_name
+     - tenant_url
+     - deployment_type
+     - region
+     - status
+   - Case-insensitive partial matching
+   - Example: `?search=acme` matches "Acme Corp", "acme@example.com", etc.
+
+**Combining Filters**:
+- All filters can be combined
+- Filters are applied in order: deployment_type → region → search
+- Example: `?deployment_type=shared&region=Australia&search=retail`
+  - First filters for shared deployments
+  - Then filters for Australia region
+  - Finally searches for "retail" in remaining results
+
+**Use Cases**:
+- Display all tenants in a grid/table
+- Filter by infrastructure type for capacity planning
+- Filter by region for compliance or support purposes
+- Search for specific tenant by name, email, or business name
+- Combine filters for advanced queries
+
+**Error Responses**:
+- `401 Unauthorized` - Missing or invalid JWT token
+- `403 Forbidden` - Insufficient permissions
+- `500 InternalError` - Database error
 
 ---
 
@@ -607,11 +808,36 @@ GET /tenant/available-clusters?deployment_type=Shared
 
 ## Role Permissions
 
-| Role | Login | Profile | Staff Mgmt | Tenant Mgmt |
-|------|-------|---------|------------|-------------|
-| **admin** | ✅ | ✅ | ✅ Full | ✅ Full |
-| **manager** | ✅ | ✅ | ❌ None | ✅ Register |
-| **staff** | ✅ | ✅ | ❌ None | ❌ None |
+| Role | Login | Profile | Staff Mgmt | Tenant Mgmt | Subscription Mgmt | Cluster Mgmt |
+|------|-------|---------|------------|-------------|-------------------|--------------|
+| **admin** | ✅ | ✅ | ✅ Full | ✅ Full | ✅ Full | ✅ Full |
+| **manager** | ✅ | ✅ | ❌ None | ✅ Full | ✅ Full | ❌ None |
+| **user** | ✅ | ✅ | ❌ None | ✅ Read + Create | ✅ Read + Create | ❌ None |
+
+### Role Details
+
+**Admin Role**:
+- Full access to all system functions
+- Can manage staff accounts (create, enable, disable, list)
+- Can manage tenants (create, list, update)
+- Can manage subscriptions (create, list, view)
+- Can manage clusters (create, deploy, update, delete, list)
+- Can view all system resources
+
+**Manager Role**:
+- Can manage tenants with full permissions (create, list, update)
+- Can manage subscriptions with full permissions (create, list, view)
+- Can view available clusters
+- Cannot manage staff accounts
+- Cannot manage cluster infrastructure
+
+**User Role**:
+- Read-only access to tenants and subscriptions
+- Can create new tenants
+- Can create new subscriptions
+- Cannot modify or delete existing tenants/subscriptions
+- Cannot manage staff accounts
+- Cannot manage cluster infrastructure
 
 ## Field Validation Rules
 
@@ -630,9 +856,10 @@ GET /tenant/available-clusters?deployment_type=Shared
 - Used for staff_id, tenant_id identifiers
 
 ### Role Fields
-- Valid values: `admin`, `manager`, `staff`
+- Valid values: `admin`, `manager`, `user`
 - Must be provided as array
 - At least one role required
+- Role hierarchy: admin (level 3) > manager (level 2) > user (level 1)
 
 ## Error Codes
 
@@ -1298,11 +1525,11 @@ GET /subscription/550e8400-e29b-41d4-a716-446655440005
 
 ## Updated Role Permissions
 
-| Role | Login | Profile | Staff Mgmt | Tenant Mgmt | Cluster Mgmt |
-|------|-------|---------|------------|-------------|--------------|
-| **admin** | ✅ | ✅ | ✅ Full | ✅ Full | ✅ Full |
-| **manager** | ✅ | ✅ | ❌ None | ✅ Register | ❌ None |
-| **staff** | ✅ | ✅ | ❌ None | ❌ None | ❌ None |
+| Role | Login | Profile | Staff Mgmt | Tenant Mgmt | Subscription Mgmt | Cluster Mgmt |
+|------|-------|---------|------------|-------------|-------------------|--------------|
+| **admin** | ✅ | ✅ | ✅ Full | ✅ Full | ✅ Full | ✅ Full |
+| **manager** | ✅ | ✅ | ❌ None | ✅ Full | ✅ Full | ❌ None |
+| **user** | ✅ | ✅ | ❌ None | ✅ Read + Create | ✅ Read + Create | ❌ None |
 
 ## Additional Field Validation Rules
 

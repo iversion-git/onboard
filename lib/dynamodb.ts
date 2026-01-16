@@ -772,6 +772,48 @@ export class DynamoDBHelper {
     }
   }
 
+  async listAllTenants(correlationId?: string): Promise<TenantRecord[]> {
+    try {
+      const items = await this.scanTable(this.tables.tenants, correlationId);
+      
+      logger.info('Scanned tenants table', {
+        totalItems: items.length,
+        correlationId
+      });
+      
+      // Validate and filter valid tenant records
+      const validTenants: TenantRecord[] = [];
+      for (const item of items) {
+        const validationResult = TenantRecordSchema.safeParse(item);
+        if (validationResult.success) {
+          validTenants.push(validationResult.data);
+        } else {
+          logger.warn('Invalid tenant record found during scan', {
+            tenantId: item.tenant_id,
+            itemKeys: Object.keys(item),
+            errors: validationResult.error.issues,
+            correlationId
+          });
+        }
+      }
+
+      logger.info('Listed all tenants', {
+        totalScanned: items.length,
+        validCount: validTenants.length,
+        invalidCount: items.length - validTenants.length,
+        correlationId
+      });
+
+      return validTenants;
+    } catch (error) {
+      logger.error('Failed to list all tenants', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        correlationId
+      });
+      throw error;
+    }
+  }
+
   async createTenant(tenantData: Omit<TenantRecord, 'tenant_id' | 'status' | 'created_at' | 'updated_at'>, correlationId?: string): Promise<DatabaseOperationResult<TenantRecord>> {
     try {
       const now = new Date().toISOString();
@@ -1898,6 +1940,8 @@ export const dynamoDBHelper = {
     dynamoDBHelper.instance.getTenant(tenantId, correlationId),
   getTenantByUrl: (tenantUrl: string, correlationId?: string) => 
     dynamoDBHelper.instance.getTenantByUrl(tenantUrl, correlationId),
+  listAllTenants: (correlationId?: string) => 
+    dynamoDBHelper.instance.listAllTenants(correlationId),
   createTenant: (tenantData: Omit<TenantRecord, 'tenant_id' | 'status' | 'created_at' | 'updated_at'>, correlationId?: string) => 
     dynamoDBHelper.instance.createTenant(tenantData, correlationId),
   updateTenant: (tenantId: string, updates: TenantUpdate, correlationId?: string) => 
