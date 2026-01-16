@@ -1600,10 +1600,12 @@ PUT /subscription/550e8400-e29b-41d4-a716-446655440005
 
 **Landlord Global Table Sync**:
 When subscription fields are updated, the changes are automatically synchronized to the Landlord Global Table:
+- `package_id` → Updates `package_id` field in landlord table
 - `tenant_url` → Updates `domain` field in landlord table
 - `tenant_api_url` → Updates `api_url` field in landlord table
 - `domain_name` → Updates `url` field in landlord table
 - `number_of_stores` → Updates `outlets` field in landlord table
+- `status` → Updates `status` field in landlord table (Active or Suspended)
 
 This ensures consistency between subscription records and the global landlord table used across regions.
 

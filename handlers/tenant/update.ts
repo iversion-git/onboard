@@ -111,17 +111,35 @@ export const updateTenantHandler: RouteHandler = async (req, res) => {
         const subscriptions = await dynamoDBHelper.getSubscriptionsByTenant(tenantId, req.correlationId);
 
         // Update each subscription's status to match tenant status
-        const updatePromises = subscriptions.map(subscription => 
-          dynamoDBHelper.updateSubscription(
+        const updatePromises = subscriptions.map(async subscription => {
+          // Update subscription status
+          await dynamoDBHelper.updateSubscription(
             subscription.subscription_id,
             { status: updates.status as 'Suspended' | 'Terminated' },
             req.correlationId
-          )
-        );
+          );
+          
+          // Also update landlord global table status
+          try {
+            const landlordStatus = 'Suspended'; // Both Suspended and Terminated map to Suspended in landlord table
+            await dynamoDBHelper.updateLandlord(
+              subscription.subscription_id,
+              { status: landlordStatus },
+              req.correlationId
+            );
+          } catch (landlordError) {
+            logger.error('Failed to update landlord status during cascade', {
+              correlationId: req.correlationId,
+              subscriptionId: subscription.subscription_id,
+              error: landlordError instanceof Error ? landlordError.message : 'Unknown error',
+            });
+            // Don't fail the cascade if landlord update fails
+          }
+        });
 
         await Promise.all(updatePromises);
 
-        logger.info('Successfully cascaded status to subscriptions', {
+        logger.info('Successfully cascaded status to subscriptions and landlord records', {
           correlationId: req.correlationId,
           tenantId,
           subscriptionCount: subscriptions.length,

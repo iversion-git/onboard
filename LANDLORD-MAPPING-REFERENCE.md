@@ -1,4 +1,4 @@
-# Landlord Table Mapping Reference - IMPLEMENTATION COMPLETE ✅
+# Landlord Table Mapping Reference - UPDATED ✅
 
 ## 📋 **Field Mapping for Subscription → Landlord Integration**
 
@@ -17,9 +17,6 @@ const landlordData = {
   name: tenant.business_name,             // ✅ Uses tenant business name
   domain: tenantUrl,                      // ✅ Generated tenant URL without https:// (e.g., "acme-corp-prod.shared.au.myapp.com")
   database: generateDatabaseName(tenant.tenant_url, subscription_type_level), // ✅ Generated database name
-  dbusername: generateDatabaseUsername(), // ✅ Random generated username
-  dbpassword: generateDatabasePassword(), // ✅ Random generated password (plain text)
-  dburl: extractDatabaseHostname(dbProxyUrl), // ✅ Just DB hostname without port (e.g., "prod-db-01-instance-1.cabaivmklndo.ap-southeast-2.rds.amazonaws.com")
   s3id: generateS3Id(`${subscription_id}-${Date.now()}`), // ✅ 8-character unique hash
   url: `https://${extractDomain(domain_name)}`, // ✅ Full URL of domain supplied during subscription creation (e.g., "https://acme-corp.com")
   api_url: tenantApiUrl,                  // ✅ Generated tenant API URL without https:// (e.g., "tenant1.au.flowrix.app")
@@ -27,10 +24,21 @@ const landlordData = {
   industry_id: subscription.subscription_type_id, // ✅ Maps subscription_type_id to industry_id
   environment: mapSubscriptionToEnvironment(subscription_type_level), // ✅ Maps Production/Dev
   outlets: subscription.number_of_stores, // ✅ Uses number_of_stores field
+  status: subscription.status === 'Active' ? 'Active' : 'Suspended', // ✅ Maps subscription status (Active or Suspended only)
   created_at: current_timestamp,          // ✅ Auto-generated
   updated_at: current_timestamp           // ✅ Auto-generated
 };
 ```
+
+### **Status Mapping (Implemented)**
+- `subscription.status: "Active"` → `landlord.status: "Active"`
+- `subscription.status: "Pending"` → `landlord.status: "Suspended"`
+- `subscription.status: "Deploying"` → `landlord.status: "Suspended"`
+- `subscription.status: "Failed"` → `landlord.status: "Suspended"`
+- `subscription.status: "Suspended"` → `landlord.status: "Suspended"`
+- `subscription.status: "Terminated"` → `landlord.status: "Suspended"`
+
+**Note**: Landlord table only supports two status values: `Active` and `Suspended`. Default status for new subscriptions is `Active`.
 
 ### **Environment Mapping (Implemented)**
 - `subscription_type_level: "Production"` → `environment: "Production"`
@@ -42,11 +50,13 @@ const landlordData = {
 
 ### **Generation Functions (Implemented)**
 - **Database name**: `generateDatabaseName()` - Uses tenant URL + random string
-- **DB username**: `generateDatabaseUsername()` - Random unique username (usr + 8 hex chars)
-- **DB password**: `generateDatabasePassword()` - 16-character secure password (plain text)
 - **S3 ID**: `generateS3Id()` - 8-character SHA256 hash
-- **DB hostname**: `extractDatabaseHostname()` - Extracts hostname from DB proxy URL (removes port)
 - **Domain extraction**: `extractDomain()` - Extracts domain from full URL for domain field
+
+### **Removed Fields**
+- ❌ `dbusername` - No longer generated or stored (database uses centralized credentials)
+- ❌ `dbpassword` - No longer generated or stored (database uses centralized credentials)
+- ❌ `dburl` - No longer stored (database connection managed by cluster)
 
 ---
 
@@ -54,12 +64,20 @@ const landlordData = {
 
 ### **Files Modified**
 - ✅ `lib/landlord-utils.ts` - Utility functions for data generation
-- ✅ `handlers/subscription/create.ts` - Integrated landlord record creation
-- ✅ `lib/data-models.ts` - LandlordRecord interface and validation
-- ✅ `lib/dynamodb.ts` - Landlord CRUD operations
+- ✅ `handlers/subscription/create.ts` - Integrated landlord record creation with status mapping
+- ✅ `handlers/subscription/update.ts` - Syncs status changes to landlord table
+- ✅ `handlers/tenant/update.ts` - Cascades tenant status to subscriptions and landlord records
+- ✅ `lib/data-models.ts` - LandlordRecord interface updated (removed db credentials, added status)
+- ✅ `lib/dynamodb.ts` - Landlord CRUD operations, subscription default status changed to Active
+
+### **Status Synchronization**
+- ✅ Subscription creation: Sets status to Active by default in both tables
+- ✅ Subscription update: Syncs status changes to landlord table
+- ✅ Tenant status cascade: Updates both subscription and landlord status when tenant is Suspended/Terminated
 
 ### **Error Handling**
 - ✅ Landlord creation failure doesn't rollback subscription creation
+- ✅ Landlord update failure doesn't fail subscription/tenant updates
 - ✅ Comprehensive logging for debugging
 - ✅ Graceful degradation if landlord table is unavailable
 
@@ -74,8 +92,8 @@ const landlordData = {
 
 ### **Step 3: Database Provisioning (Future)**
 - Create actual RDS Aurora MySQL database
-- Update `dburl` field with real database proxy URL
 - Implement database schema creation
+- Database credentials managed centrally by cluster
 
 ### **Step 4: Route 53 DNS Management (Future)**
 - Create subdomain DNS records
@@ -91,12 +109,13 @@ const landlordData = {
 | Component | Status | Notes |
 |-----------|--------|-------|
 | Field Mapping | ✅ Complete | All fields mapped and implemented |
+| Status Sync | ✅ Complete | Status synchronized across subscription and landlord tables |
 | Utility Functions | ✅ Complete | All generation functions working |
 | Integration | ✅ Complete | Landlord creation integrated in subscription flow |
 | Error Handling | ✅ Complete | Graceful failure handling implemented |
 | Testing | ✅ Complete | Core functionality tested and working |
-| Database URL | ✅ Complete | Uses actual DB proxy URL from cluster or placeholder |
+| Database Credentials | ✅ Removed | Centralized credential management by cluster |
 
 ---
 
-*This implementation completes Step 2 of the multi-stage onboarding process. The landlord global table now receives data automatically when subscriptions are created, providing a single source of truth for all active subscriptions across all regions.*
+*This implementation completes Step 2 of the multi-stage onboarding process. The landlord global table now receives data automatically when subscriptions are created, providing a single source of truth for all active subscriptions across all regions. Status changes are automatically synchronized across tenant, subscription, and landlord tables.*

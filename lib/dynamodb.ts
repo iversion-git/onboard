@@ -1683,7 +1683,7 @@ export class DynamoDBHelper {
       const subscriptionRecord: SubscriptionRecord = {
         subscription_id: randomUUID(),
         ...subscriptionData,
-        status: 'Pending',
+        status: 'Active', // Default status is Active
         created_at: now,
         updated_at: now,
       };

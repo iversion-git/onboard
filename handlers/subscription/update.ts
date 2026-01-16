@@ -108,7 +108,7 @@ export const updateSubscriptionHandler: RouteHandler = async (req, res) => {
     const updatedSubscription = result.data;
 
     // Update landlord global table if URL or domain fields changed
-    if (updates.tenant_url || updates.tenant_api_url || updates.domain_name || updates.number_of_stores) {
+    if (updates.tenant_url || updates.tenant_api_url || updates.domain_name || updates.number_of_stores || updates.status || updates.package_id) {
       logger.info('Updating landlord global table', {
         correlationId: req.correlationId,
         subscriptionId,
@@ -137,6 +137,15 @@ export const updateSubscriptionHandler: RouteHandler = async (req, res) => {
           
           if (updates.number_of_stores) {
             landlordUpdates.outlets = updates.number_of_stores;
+          }
+          
+          if (updates.package_id) {
+            landlordUpdates.package_id = updates.package_id;
+          }
+          
+          if (updates.status) {
+            // Map subscription status to landlord status (Active or Suspended only)
+            landlordUpdates.status = updates.status === 'Active' ? 'Active' : 'Suspended';
           }
 
           // Update landlord record

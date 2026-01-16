@@ -361,11 +361,12 @@ export const createSubscriptionHandler: RouteHandler = async (req, res) => {
 
       // Generate required fields for landlord record
       const databaseName = generateDatabaseName(tenant.tenant_url, subscription_type_level);
-      const dbUsername = generateDatabaseUsername();
-      const dbPassword = generateDatabasePassword();
       const s3Id = generateS3Id(`${result.data?.subscription_id}-${Date.now()}`);
       const environment = mapSubscriptionToEnvironment(subscription_type_level);
       const domain = extractDomain(domain_name);
+      
+      // Map subscription status to landlord status (Active or Suspended only)
+      const landlordStatus = result.data?.status === 'Active' ? 'Active' : 'Suspended';
 
       // Create landlord record
       const landlordData = {
@@ -373,9 +374,6 @@ export const createSubscriptionHandler: RouteHandler = async (req, res) => {
         name: tenant.business_name,
         domain: tenantUrl, // Generated tenant URL without https:// (e.g., "acme-corp-prod.shared.au.myapp.com")
         database: databaseName,
-        dbusername: dbUsername,
-        dbpassword: dbPassword,
-        dburl: extractDatabaseHostname(dbProxyUrl), // Just the DB hostname without port (e.g., "prod-db-01-instance-1.cabaivmklndo.ap-southeast-2.rds.amazonaws.com")
         s3id: s3Id,
         url: `https://${extractDomain(domain_name)}`, // Full URL of the domain supplied during subscription creation (e.g., "https://acme-corp.com")
         api_url: tenantApiUrl, // Generated tenant API URL without https:// (e.g., "tenant1.au.flowrix.app")
@@ -383,6 +381,7 @@ export const createSubscriptionHandler: RouteHandler = async (req, res) => {
         industry_id: result.data?.subscription_type_id!,
         environment: environment,
         outlets: result.data?.number_of_stores!,
+        status: landlordStatus,
       };
 
       const landlordResult = await dynamoDBHelper.createLandlord(landlordData, req.correlationId);
@@ -407,6 +406,7 @@ export const createSubscriptionHandler: RouteHandler = async (req, res) => {
           landlordId: landlordResult.data?.id,
           databaseName,
           s3Id,
+          status: landlordStatus,
         });
       }
     } catch (landlordError) {
