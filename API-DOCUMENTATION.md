@@ -7,7 +7,7 @@ https://85n0x7rpf3.execute-api.ap-southeast-2.amazonaws.com/v1
 
 ## API Endpoints Summary
 
-**Total Endpoints: 22**
+**Total Endpoints: 24**
 
 ### Authentication Endpoints (3)
 - `POST /auth/login` - Staff login with JWT token generation
@@ -21,10 +21,12 @@ https://85n0x7rpf3.execute-api.ap-southeast-2.amazonaws.com/v1
 - `GET /staff/me` - Get current authenticated staff profile
 - `GET /staff/list` - List all staff members with last login tracking (Admin only)
 
-### Tenant Management Endpoints (3)
+### Tenant Management Endpoints (5)
 - `POST /tenant/register` - Register new tenant for ERP provisioning (Admin/Manager/User)
 - `GET /tenant/available-clusters` - Get available clusters by deployment type (Admin/Manager/User)
 - `GET /tenant/list` - List all tenants with filtering and search (Admin/Manager/User)
+- `GET /tenant/:tenantId` - Get single tenant details (Admin/Manager/User)
+- `PUT /tenant/:tenantId` - Update tenant information (Admin/Manager)
 
 ### Subscription Management Endpoints (3)
 - `POST /subscription/create` - Create new subscription for tenant (Admin/Manager)
@@ -659,6 +661,150 @@ GET /tenant/list?deployment_type=dedicated&region=US&search=corp
 **Error Responses**:
 - `401 Unauthorized` - Missing or invalid JWT token
 - `403 Forbidden` - Insufficient permissions
+- `500 InternalError` - Database error
+
+---
+
+### GET /tenant/:tenantId
+**Description**: Get single tenant details for viewing or editing
+
+**Authentication**: ✅ Required (Admin/Manager/User)
+
+**Path Parameters**:
+- `tenantId` (required): UUID of the tenant to retrieve
+
+**Example Request**:
+```
+GET /tenant/550e8400-e29b-41d4-a716-446655440003
+```
+
+**Success Response (200)**:
+```json
+{
+  "success": true,
+  "data": {
+    "tenant_id": "550e8400-e29b-41d4-a716-446655440003",
+    "name": "John Smith",
+    "email": "john.smith@acme.com",
+    "mobile_number": "+1-555-123-4567",
+    "business_name": "Acme Corporation",
+    "status": "Active",
+    "deployment_type": "Shared",
+    "region": "Australia",
+    "tenant_url": "acme-corp",
+    "subscription_type_id": 10,
+    "package_id": 20,
+    "cluster_id": "550e8400-e29b-41d4-a716-446655440004",
+    "cluster_name": "Shared Production Cluster",
+    "created_at": "2025-01-07T05:00:00.000Z",
+    "updated_at": "2025-01-07T05:00:00.000Z"
+  },
+  "timestamp": "2026-01-16T08:00:00.000Z"
+}
+```
+
+**Use Cases**:
+- Populate edit form with current tenant data
+- View detailed tenant information
+- Verify tenant details before creating subscription
+
+**Error Responses**:
+- `401 Unauthorized` - Missing or invalid JWT token
+- `403 Forbidden` - Insufficient permissions
+- `404 NotFound` - Tenant not found
+- `400 ValidationError` - Invalid tenant ID format
+
+---
+
+### PUT /tenant/:tenantId
+**Description**: Update tenant information (contact details and status)
+
+**Authentication**: ✅ Required (Admin/Manager)
+
+**Path Parameters**:
+- `tenantId` (required): UUID of the tenant to update
+
+**Request Body** (all fields optional, include only fields to update):
+```json
+{
+  "name": "John Smith Jr.",                    // ❌ Optional - Contact person name (1-255 characters)
+  "email": "john.smith.jr@acme.com",          // ❌ Optional - Contact email address
+  "mobile_number": "+1-555-999-8888",         // ❌ Optional - Contact mobile number (1-20 characters)
+  "business_name": "Acme Corporation Ltd",    // ❌ Optional - Business name (1-255 characters)
+  "status": "Suspended"                        // ❌ Optional - Status (Admin only)
+}
+```
+
+**Updatable Fields**:
+- ✅ `name` - Contact person name
+- ✅ `email` - Contact email (automatically converted to lowercase)
+- ✅ `mobile_number` - Contact phone number
+- ✅ `business_name` - Business or company name
+- ✅ `status` - Tenant status (Admin only - Pending, Active, Suspended, Terminated)
+
+**Immutable Fields** (cannot be updated):
+- ❌ `tenant_url` - Would break existing subscriptions and URLs
+- ❌ `deployment_type` - Infrastructure decision, cannot be changed
+- ❌ `region` - Infrastructure decision, cannot be changed
+- ❌ `cluster_id` - Infrastructure assignment, cannot be changed
+- ❌ `subscription_type_id` - Moved to subscription level
+- ❌ `package_id` - Moved to subscription level
+
+**Example Request**:
+```
+PUT /tenant/550e8400-e29b-41d4-a716-446655440003
+```
+
+**Success Response (200)**:
+```json
+{
+  "success": true,
+  "data": {
+    "tenant_id": "550e8400-e29b-41d4-a716-446655440003",
+    "name": "John Smith Jr.",
+    "email": "john.smith.jr@acme.com",
+    "mobile_number": "+1-555-999-8888",
+    "business_name": "Acme Corporation Ltd",
+    "status": "Active",
+    "deployment_type": "Shared",
+    "region": "Australia",
+    "tenant_url": "acme-corp",
+    "subscription_type_id": 10,
+    "package_id": 20,
+    "cluster_id": "550e8400-e29b-41d4-a716-446655440004",
+    "cluster_name": "Shared Production Cluster",
+    "created_at": "2025-01-07T05:00:00.000Z",
+    "updated_at": "2026-01-16T08:15:00.000Z"
+  },
+  "timestamp": "2026-01-16T08:15:00.000Z"
+}
+```
+
+**Status Update Permissions**:
+- Only **Admin** role can update the `status` field
+- Manager attempting to update status will receive `403 Forbidden`
+- Status values: `Pending`, `Active`, `Suspended`, `Terminated`
+
+**Typical Workflow**:
+1. User clicks "Edit" on tenant in grid
+2. Frontend calls `GET /tenant/:tenantId` to fetch current data
+3. User modifies fields in edit form
+4. Frontend calls `PUT /tenant/:tenantId` with only changed fields
+5. Backend validates, updates, and returns updated tenant
+
+**Validation Rules**:
+- At least one field must be provided for update
+- Email must be valid email format
+- Name and business_name must be 1-255 characters
+- Mobile number must be 1-20 characters
+- Status must be one of the valid enum values
+- Unknown fields will be rejected (strict validation)
+
+**Error Responses**:
+- `401 Unauthorized` - Missing or invalid JWT token
+- `403 Forbidden` - Insufficient permissions (not admin/manager) or non-admin trying to update status
+- `404 NotFound` - Tenant not found
+- `400 ValidationError` - Invalid field values, no fields to update, or unknown fields
 - `500 InternalError` - Database error
 
 ---

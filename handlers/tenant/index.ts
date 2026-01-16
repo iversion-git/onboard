@@ -2,3 +2,5 @@
 export { registerHandler } from './register.js';
 export { availableClustersHandler } from './available-clusters.js';
 export { listTenantsHandler } from './list.js';
+export { getTenantHandler } from './get.js';
+export { updateTenantHandler } from './update.js';
