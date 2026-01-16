@@ -29,9 +29,9 @@ https://85n0x7rpf3.execute-api.ap-southeast-2.amazonaws.com/v1
 - `PUT /tenant/:tenantId` - Update tenant information (Admin/Manager)
 
 ### Subscription Management Endpoints (3)
-- `POST /subscription/create` - Create new subscription for tenant (Admin/Manager)
-- `GET /subscription/list` - List subscriptions for a tenant (Admin/Manager)
-- `GET /subscription/:subscriptionId` - Get specific subscription details (Admin/Manager)
+- `POST /subscription/create` - Create new subscription for tenant (Admin/Manager/User)
+- `GET /subscription/list` - List all subscriptions with filtering and search (Admin/Manager/User)
+- `GET /subscription/:subscriptionId` - Get specific subscription details (Admin/Manager/User)
 
 ### Cluster Management Endpoints (6)
 - `GET /clusters` - List all clusters (Admin only)
@@ -1177,16 +1177,29 @@ PUT /tenant/550e8400-e29b-41d4-a716-446655440003
 ---
 
 ### GET /subscription/list
-**Description**: List all subscriptions for a specific tenant
+**Description**: List all subscriptions with optional filtering and search for grid display
 
-**Authentication**: ✅ Required (Admin or Manager only)
+**Authentication**: ✅ Required (Admin/Manager/User)
 
-**Query Parameters**:
-- `tenant_id` (required): UUID of the tenant to list subscriptions for
+**Query Parameters** (all optional):
+- `tenant_id` - Filter by specific tenant UUID
+- `subscription_type_level` - Filter by "Production" or "Dev"
+- `region` - Filter by AWS region (e.g., "ap-southeast-2", "us-east-1", "dedicated")
+- `package_id` - Filter by package ID (numeric)
+- `subscription_type_id` - Filter by subscription type ID (numeric)
+- `status` - Filter by status ("Pending", "Deploying", "Active", "Failed", "Terminated")
+- `search` - Search across all text fields
 
-**Example Request**:
+**Example Requests**:
 ```
+GET /subscription/list
 GET /subscription/list?tenant_id=550e8400-e29b-41d4-a716-446655440003
+GET /subscription/list?subscription_type_level=Production
+GET /subscription/list?region=ap-southeast-2
+GET /subscription/list?package_id=20
+GET /subscription/list?status=Active
+GET /subscription/list?search=acme
+GET /subscription/list?subscription_type_level=Production&region=ap-southeast-2&status=Active
 ```
 
 **Success Response (200)**:
@@ -1194,65 +1207,158 @@ GET /subscription/list?tenant_id=550e8400-e29b-41d4-a716-446655440003
 {
   "success": true,
   "data": {
-    "tenant_id": "550e8400-e29b-41d4-a716-446655440003",
-    "tenant_name": "Acme Corporation",
     "subscriptions": [
       {
         "subscription_id": "550e8400-e29b-41d4-a716-446655440005",
+        "tenant_id": "550e8400-e29b-41d4-a716-446655440003",
+        "tenant_name": "Acme Corporation",
         "subscription_name": "acme-corp-prod",
         "subscription_type_level": "Production",
-        "tenant_url": "acme-corp.flowrix.app",
-        "tenant_api_url": "acme-corp.flowrix.app",
+        "tenant_url": "acme-corp-prod.shared.au.myapp.com",
+        "tenant_api_url": "acme-corp-prod-api.shared.au.myapp.com",
         "domain_name": "https://mywebsite.com",
         "number_of_stores": 5,
-        "region": "dedicated",
-        "deployment_type": "Dedicated",
-        "subscription_type_id": 1,
+        "region": "ap-southeast-2",
+        "deployment_type": "Shared",
+        "subscription_type_id": 10,
         "subscription_type_name": "General",
-        "package_id": 2,
+        "package_id": 20,
         "package_name": "Professional",
         "cluster_id": "550e8400-e29b-41d4-a716-446655440004",
-        "cluster_name": "Dedicated Production Cluster",
+        "cluster_name": "Shared Production Cluster",
         "status": "Active",
-        "deployment_id": "arn:aws:cloudformation:us-east-1:123456789012:stack/acme-prod/12345678",
-        "deployment_status": "CREATE_COMPLETE",
         "created_at": "2025-01-07T05:00:00.000Z",
         "updated_at": "2025-01-07T06:00:00.000Z",
         "deployed_at": "2025-01-07T06:00:00.000Z"
       },
       {
         "subscription_id": "550e8400-e29b-41d4-a716-446655440006",
-        "subscription_name": "acme-corp-dev-22",
+        "tenant_id": "550e8400-e29b-41d4-a716-446655440007",
+        "tenant_name": "Tech Corporation",
+        "subscription_name": "tech-corp-dev-45",
         "subscription_type_level": "Dev",
-        "tenant_url": "acme-corp-dev-22.flowrix.app",
-        "tenant_api_url": "acme-corp-dev-22.flowrix.app",
-        "domain_name": "https://dev.mywebsite.com",
+        "tenant_url": "tech-corp-dev-45.shared.au.myapp.com",
+        "tenant_api_url": "tech-corp-dev-45-api.shared.au.myapp.com",
+        "domain_name": "https://dev.techcorp.com",
         "number_of_stores": 2,
-        "region": "dedicated",
-        "deployment_type": "Dedicated",
-        "subscription_type_id": 1,
+        "region": "ap-southeast-2",
+        "deployment_type": "Shared",
+        "subscription_type_id": 10,
         "subscription_type_name": "General",
-        "package_id": 2,
-        "package_name": "Professional",
+        "package_id": 10,
+        "package_name": "Essential",
         "cluster_id": "550e8400-e29b-41d4-a716-446655440004",
-        "cluster_name": "Dedicated Production Cluster",
+        "cluster_name": "Shared Production Cluster",
         "status": "Pending",
-        "deployment_id": null,
-        "deployment_status": null,
         "created_at": "2025-01-07T07:00:00.000Z",
         "updated_at": "2025-01-07T07:00:00.000Z",
         "deployed_at": null
       }
-    ]
+    ],
+    "count": 2,
+    "filters": {
+      "tenant_id": null,
+      "subscription_type_level": null,
+      "region": null,
+      "package_id": null,
+      "subscription_type_id": null,
+      "status": null,
+      "search": null
+    }
   },
-  "timestamp": "2025-01-07T08:00:00.000Z"
+  "timestamp": "2026-01-16T08:00:00.000Z"
 }
 ```
 
+**Response Fields**:
+- `subscriptions` - Array of subscription records matching the filters
+- `count` - Number of subscriptions returned after filtering
+- `filters` - Echo of applied filters (null if not used)
+
+**Subscription Fields**:
+- `subscription_id` - Unique identifier
+- `tenant_id` - Associated tenant ID
+- `tenant_name` - Business name from tenant record
+- `subscription_name` - Generated subscription name
+- `subscription_type_level` - "Production" or "Dev"
+- `tenant_url` - Generated tenant URL
+- `tenant_api_url` - Generated API URL
+- `domain_name` - Custom domain name
+- `number_of_stores` - Number of stores
+- `region` - AWS region code
+- `deployment_type` - "Shared" or "Dedicated"
+- `subscription_type_id` - Subscription type ID
+- `subscription_type_name` - Subscription type name (e.g., "General")
+- `package_id` - Package ID
+- `package_name` - Package name (e.g., "Professional")
+- `cluster_id` - Assigned cluster ID
+- `cluster_name` - Assigned cluster name
+- `status` - Current status
+- `created_at` - ISO timestamp when created
+- `updated_at` - ISO timestamp when last updated
+- `deployed_at` - ISO timestamp when deployed (null if not deployed)
+
+**Filtering Options**:
+
+1. **Tenant ID Filter**:
+   - Filter subscriptions for a specific tenant
+   - Example: `?tenant_id=550e8400-e29b-41d4-a716-446655440003`
+
+2. **Subscription Type Level Filter**:
+   - Values: "Production" or "Dev" (case-insensitive)
+   - Example: `?subscription_type_level=Production`
+
+3. **Region Filter**:
+   - Filter by AWS region code
+   - Example: `?region=ap-southeast-2`
+
+4. **Package ID Filter**:
+   - Filter by package ID (numeric)
+   - Example: `?package_id=20`
+
+5. **Subscription Type ID Filter**:
+   - Filter by subscription type ID (numeric)
+   - Example: `?subscription_type_id=10`
+
+6. **Status Filter**:
+   - Values: "Pending", "Deploying", "Active", "Failed", "Terminated" (case-insensitive)
+   - Example: `?status=Active`
+
+7. **Search Filter**:
+   - Searches across all text fields:
+     - subscription_name
+     - tenant_url
+     - tenant_api_url
+     - domain_name
+     - region
+     - deployment_type
+     - cluster_name
+     - status
+     - subscription_type_level
+   - Case-insensitive partial matching
+   - Example: `?search=acme`
+
+**Combining Filters**:
+- All filters can be combined
+- Filters are applied in order: tenant_id → subscription_type_level → region → package_id → subscription_type_id → status → search
+- Example: `?subscription_type_level=Production&region=ap-southeast-2&status=Active`
+  - First filters for Production subscriptions
+  - Then filters for ap-southeast-2 region
+  - Finally filters for Active status
+
+**Use Cases**:
+- Display all subscriptions in a grid/table
+- Filter by tenant to see all subscriptions for a specific customer
+- Filter by environment (Production/Dev) for capacity planning
+- Filter by region for compliance or support purposes
+- Filter by package or subscription type for billing analysis
+- Search for specific subscription by name or URL
+- Combine filters for advanced queries
+
 **Error Responses**:
 - `401 Unauthorized` - Missing or invalid JWT token
-- `403 Forbidden` - Insufficient permissions (not admin or manager)
-- `400 ValidationError` - Invalid tenant_id or tenant not found
+- `403 Forbidden` - Insufficient permissions
+- `500 InternalError` - Database error
 
 ---
 

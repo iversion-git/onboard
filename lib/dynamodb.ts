@@ -1299,6 +1299,80 @@ export class DynamoDBHelper {
     }
   }
 
+  async getAllPackages(correlationId?: string): Promise<PackageRecord[]> {
+    try {
+      const items = await this.scanTable(this.tables.packages, correlationId);
+      
+      logger.info('Scanned packages table', {
+        totalItems: items.length,
+        correlationId
+      });
+      
+      const validPackages: PackageRecord[] = [];
+      for (const item of items) {
+        const validationResult = PackageRecordSchema.safeParse(item);
+        if (validationResult.success) {
+          validPackages.push(validationResult.data);
+        } else {
+          logger.warn('Invalid package record found during scan', {
+            packageId: item.package_id,
+            errors: validationResult.error.issues,
+            correlationId
+          });
+        }
+      }
+
+      logger.info('Listed all packages', {
+        totalScanned: items.length,
+        validCount: validPackages.length,
+        correlationId
+      });
+
+      return validPackages;
+    } catch (error) {
+      logger.error('Failed to list all packages', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        correlationId
+      });
+      throw error;
+    }
+  }
+
+  async createPackage(packageData: Omit<PackageRecord, 'created_at' | 'updated_at'>, correlationId?: string): Promise<DatabaseOperationResult<PackageRecord>> {
+    try {
+      const now = new Date().toISOString();
+      const packageRecord: PackageRecord = {
+        ...packageData,
+        created_at: now,
+        updated_at: now,
+      };
+
+      // Validate the record before saving
+      const validationResult = PackageRecordSchema.safeParse(packageRecord);
+      if (!validationResult.success) {
+        logger.error('Invalid package record data', { 
+          errors: validationResult.error.issues,
+          correlationId 
+        });
+        throw createApiError('ValidationError', 'Invalid package record data');
+      }
+
+      await this.putItem(this.tables.packages, validationResult.data, correlationId);
+      
+      return { 
+        success: true, 
+        data: validationResult.data,
+        correlationId 
+      };
+    } catch (error) {
+      logger.error('Failed to create package', { 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        correlationId 
+      });
+      throw error;
+    }
+  }
+
   // Subscription Type data access methods
   async getSubscriptionType(subscriptionTypeId: number, correlationId?: string): Promise<SubscriptionTypeQueryResult> {
     try {
@@ -1384,6 +1458,80 @@ export class DynamoDBHelper {
       return validSubscriptionTypes;
     } catch (error) {
       logger.error('Failed to get active subscription types', { 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        correlationId 
+      });
+      throw error;
+    }
+  }
+
+  async getAllSubscriptionTypes(correlationId?: string): Promise<SubscriptionTypeRecord[]> {
+    try {
+      const items = await this.scanTable(this.tables.subscriptionTypes, correlationId);
+      
+      logger.info('Scanned subscription types table', {
+        totalItems: items.length,
+        correlationId
+      });
+      
+      const validTypes: SubscriptionTypeRecord[] = [];
+      for (const item of items) {
+        const validationResult = SubscriptionTypeRecordSchema.safeParse(item);
+        if (validationResult.success) {
+          validTypes.push(validationResult.data);
+        } else {
+          logger.warn('Invalid subscription type record found during scan', {
+            subscriptionTypeId: item.subscription_type_id,
+            errors: validationResult.error.issues,
+            correlationId
+          });
+        }
+      }
+
+      logger.info('Listed all subscription types', {
+        totalScanned: items.length,
+        validCount: validTypes.length,
+        correlationId
+      });
+
+      return validTypes;
+    } catch (error) {
+      logger.error('Failed to list all subscription types', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        correlationId
+      });
+      throw error;
+    }
+  }
+
+  async createSubscriptionType(subscriptionTypeData: Omit<SubscriptionTypeRecord, 'created_at' | 'updated_at'>, correlationId?: string): Promise<DatabaseOperationResult<SubscriptionTypeRecord>> {
+    try {
+      const now = new Date().toISOString();
+      const subscriptionTypeRecord: SubscriptionTypeRecord = {
+        ...subscriptionTypeData,
+        created_at: now,
+        updated_at: now,
+      };
+
+      // Validate the record before saving
+      const validationResult = SubscriptionTypeRecordSchema.safeParse(subscriptionTypeRecord);
+      if (!validationResult.success) {
+        logger.error('Invalid subscription type record data', { 
+          errors: validationResult.error.issues,
+          correlationId 
+        });
+        throw createApiError('ValidationError', 'Invalid subscription type record data');
+      }
+
+      await this.putItem(this.tables.subscriptionTypes, validationResult.data, correlationId);
+      
+      return { 
+        success: true, 
+        data: validationResult.data,
+        correlationId 
+      };
+    } catch (error) {
+      logger.error('Failed to create subscription type', { 
         error: error instanceof Error ? error.message : 'Unknown error',
         correlationId 
       });
@@ -1482,6 +1630,48 @@ export class DynamoDBHelper {
         tenantId,
         error: error instanceof Error ? error.message : 'Unknown error',
         correlationId 
+      });
+      throw error;
+    }
+  }
+
+  async listAllSubscriptions(correlationId?: string): Promise<SubscriptionRecord[]> {
+    try {
+      const items = await this.scanTable(this.tables.subscriptions, correlationId);
+      
+      logger.info('Scanned subscriptions table', {
+        totalItems: items.length,
+        correlationId
+      });
+      
+      // Validate and filter valid subscription records
+      const validSubscriptions: SubscriptionRecord[] = [];
+      for (const item of items) {
+        const validationResult = SubscriptionRecordSchema.safeParse(item);
+        if (validationResult.success) {
+          validSubscriptions.push(validationResult.data);
+        } else {
+          logger.warn('Invalid subscription record found during scan', {
+            subscriptionId: item.subscription_id,
+            itemKeys: Object.keys(item),
+            errors: validationResult.error.issues,
+            correlationId
+          });
+        }
+      }
+
+      logger.info('Listed all subscriptions', {
+        totalScanned: items.length,
+        validCount: validSubscriptions.length,
+        invalidCount: items.length - validSubscriptions.length,
+        correlationId
+      });
+
+      return validSubscriptions;
+    } catch (error) {
+      logger.error('Failed to list all subscriptions', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        correlationId
       });
       throw error;
     }
@@ -1966,18 +2156,28 @@ export const dynamoDBHelper = {
     dynamoDBHelper.instance.getPackage(packageId, correlationId),
   getAllActivePackages: (correlationId?: string) => 
     dynamoDBHelper.instance.getAllActivePackages(correlationId),
+  getAllPackages: (correlationId?: string) => 
+    dynamoDBHelper.instance.getAllPackages(correlationId),
+  createPackage: (packageData: Omit<PackageRecord, 'created_at' | 'updated_at'>, correlationId?: string) => 
+    dynamoDBHelper.instance.createPackage(packageData, correlationId),
 
   // Subscription Type methods
   getSubscriptionType: (subscriptionTypeId: number, correlationId?: string) => 
     dynamoDBHelper.instance.getSubscriptionType(subscriptionTypeId, correlationId),
   getAllActiveSubscriptionTypes: (correlationId?: string) => 
     dynamoDBHelper.instance.getAllActiveSubscriptionTypes(correlationId),
+  getAllSubscriptionTypes: (correlationId?: string) => 
+    dynamoDBHelper.instance.getAllSubscriptionTypes(correlationId),
+  createSubscriptionType: (subscriptionTypeData: Omit<SubscriptionTypeRecord, 'created_at' | 'updated_at'>, correlationId?: string) => 
+    dynamoDBHelper.instance.createSubscriptionType(subscriptionTypeData, correlationId),
 
   // Subscription methods
   getSubscription: (subscriptionId: string, correlationId?: string) => 
     dynamoDBHelper.instance.getSubscription(subscriptionId, correlationId),
   getSubscriptionsByTenant: (tenantId: string, correlationId?: string) => 
     dynamoDBHelper.instance.getSubscriptionsByTenant(tenantId, correlationId),
+  listAllSubscriptions: (correlationId?: string) => 
+    dynamoDBHelper.instance.listAllSubscriptions(correlationId),
   createSubscription: (subscriptionData: Omit<SubscriptionRecord, 'subscription_id' | 'status' | 'created_at' | 'updated_at'>, correlationId?: string) => 
     dynamoDBHelper.instance.createSubscription(subscriptionData, correlationId),
   updateSubscription: (subscriptionId: string, updates: SubscriptionUpdate, correlationId?: string) => 
