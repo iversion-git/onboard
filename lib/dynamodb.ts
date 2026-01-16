@@ -281,6 +281,36 @@ export class DynamoDBHelper {
     }
   }
 
+  async scanTable(tableName: string, correlationId?: string) {
+    try {
+      logger.info('DynamoDB Scan operation', { 
+        tableName,
+        correlationId 
+      });
+
+      const command = new ScanCommand({
+        TableName: tableName,
+      });
+
+      const result = await this.client.send(command);
+      
+      logger.info('DynamoDB Scan completed', { 
+        tableName, 
+        itemCount: result.Items?.length || 0,
+        correlationId 
+      });
+
+      return result.Items || [];
+    } catch (error) {
+      logger.error('DynamoDB Scan failed', { 
+        tableName, 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        correlationId 
+      });
+      throw error;
+    }
+  }
+
   // Staff data access methods with validation
   async getStaffById(staffId: string, correlationId?: string): Promise<StaffQueryResult> {
     try {
@@ -353,6 +383,11 @@ export class DynamoDBHelper {
     try {
       const items = await this.scanTable(this.tables.staff, correlationId);
       
+      logger.info('Scanned staff table', {
+        totalItems: items.length,
+        correlationId
+      });
+      
       // Validate and filter valid staff records
       const validStaff: StaffRecord[] = [];
       for (const item of items) {
@@ -362,6 +397,8 @@ export class DynamoDBHelper {
         } else {
           logger.warn('Invalid staff record found during scan', {
             staffId: item.staff_id,
+            email: item.email,
+            itemKeys: Object.keys(item),
             errors: validationResult.error.errors,
             correlationId
           });
@@ -369,7 +406,9 @@ export class DynamoDBHelper {
       }
 
       logger.info('Listed all staff members', {
-        count: validStaff.length,
+        totalScanned: items.length,
+        validCount: validStaff.length,
+        invalidCount: items.length - validStaff.length,
         correlationId
       });
 
@@ -1835,6 +1874,8 @@ export const dynamoDBHelper = {
     dynamoDBHelper.instance.getStaffById(staffId, correlationId),
   getStaffByEmail: (email: string, correlationId?: string) => 
     dynamoDBHelper.instance.getStaffByEmail(email, correlationId),
+  listAllStaff: (correlationId?: string) => 
+    dynamoDBHelper.instance.listAllStaff(correlationId),
   createStaff: (staffData: Omit<StaffRecord, 'staff_id' | 'created_at' | 'updated_at'>, correlationId?: string) => 
     dynamoDBHelper.instance.createStaff(staffData, correlationId),
   updateStaff: (staffId: string, updates: StaffUpdate, correlationId?: string) => 
