@@ -3,7 +3,12 @@ import type { InternalRouter } from '../lib/router.js';
 import { authMiddleware, requireRole } from '../middleware/auth.js';
 import { validationMiddleware } from '../middleware/validation.js';
 import { CreateSubscriptionSchema } from '../lib/data-models.js';
-import { createSubscriptionHandler, listSubscriptionsHandler, getSubscriptionHandler } from '../handlers/subscription/index.js';
+import { 
+  createSubscriptionHandler, 
+  listSubscriptionsHandler, 
+  getSubscriptionHandler,
+  updateSubscriptionHandler
+} from '../handlers/subscription/index.js';
 
 export function registerSubscriptionRoutes(router: InternalRouter): void {
   // POST /subscription/create - Create new subscription for tenant (admin/manager/user can create)
@@ -28,5 +33,12 @@ export function registerSubscriptionRoutes(router: InternalRouter): void {
     authMiddleware(),
     requireRole(['admin', 'manager', 'user']),
     getSubscriptionHandler
+  );
+
+  // PUT /subscription/:subscriptionId - Update subscription information (admin/manager only)
+  router.put('/subscription/:subscriptionId',
+    authMiddleware(),
+    requireRole(['admin', 'manager']),
+    updateSubscriptionHandler
   );
 }

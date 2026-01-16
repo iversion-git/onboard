@@ -7,7 +7,7 @@ https://85n0x7rpf3.execute-api.ap-southeast-2.amazonaws.com/v1
 
 ## API Endpoints Summary
 
-**Total Endpoints: 28**
+**Total Endpoints: 29**
 
 ### Authentication Endpoints (3)
 - `POST /auth/login` - Staff login with JWT token generation
@@ -28,10 +28,11 @@ https://85n0x7rpf3.execute-api.ap-southeast-2.amazonaws.com/v1
 - `GET /tenant/:tenantId` - Get single tenant details (Admin/Manager/User)
 - `PUT /tenant/:tenantId` - Update tenant information (Admin/Manager)
 
-### Subscription Management Endpoints (3)
+### Subscription Management Endpoints (4)
 - `POST /subscription/create` - Create new subscription for tenant (Admin/Manager/User)
 - `GET /subscription/list` - List all subscriptions with filtering and search (Admin/Manager/User)
 - `GET /subscription/:subscriptionId` - Get specific subscription details (Admin/Manager/User)
+- `PUT /subscription/:subscriptionId` - Update subscription information (Admin/Manager)
 
 ### Cluster Management Endpoints (6)
 - `GET /clusters` - List all clusters with filtering and search (Admin only)
@@ -1530,6 +1531,102 @@ GET /subscription/550e8400-e29b-41d4-a716-446655440005
 - `401 Unauthorized` - Missing or invalid JWT token
 - `403 Forbidden` - Insufficient permissions (not admin or manager)
 - `404 NotFound` - Subscription not found
+
+---
+
+### PUT /subscription/:subscriptionId
+**Description**: Update subscription information (Admin/Manager only)
+
+**Authentication**: ✅ Required (Admin/Manager)
+
+**Path Parameters**:
+- `subscriptionId` (required): UUID of the subscription to update
+
+**Request Body** (all fields optional, include only fields to update):
+```json
+{
+  "package_id": 30,                                      // ❌ Optional - Change package (validates package exists)
+  "tenant_url": "acme-corp-updated.shared.au.myapp.com", // ❌ Optional - Update tenant URL
+  "tenant_api_url": "acme-corp-updated-api.shared.au.myapp.com", // ❌ Optional - Update API URL
+  "domain_name": "https://newdomain.com",                // ❌ Optional - Update custom domain
+  "number_of_stores": 10,                                // ❌ Optional - Update store count (minimum: 1)
+  "status": "Active"                                     // ❌ Optional - Update status (Admin only)
+}
+```
+
+**Updatable Fields**:
+- ✅ `package_id` - Change subscription package (validates package exists and is active)
+- ✅ `tenant_url` - Update tenant URL
+- ✅ `tenant_api_url` - Update tenant API URL
+- ✅ `domain_name` - Update custom domain name
+- ✅ `number_of_stores` - Update number of stores (minimum: 1)
+- ✅ `status` - Update subscription status (Admin only - Pending, Deploying, Active, Failed, Suspended, Terminated)
+
+**Example Request**:
+```
+PUT /subscription/550e8400-e29b-41d4-a716-446655440005
+```
+
+**Success Response (200)**:
+```json
+{
+  "success": true,
+  "data": {
+    "subscription_id": "550e8400-e29b-41d4-a716-446655440005",
+    "tenant_id": "550e8400-e29b-41d4-a716-446655440003",
+    "tenant_name": "Acme Corporation",
+    "subscription_name": "acme-corp-prod",
+    "subscription_type_level": "Production",
+    "tenant_url": "acme-corp-updated.shared.au.myapp.com",
+    "tenant_api_url": "acme-corp-updated-api.shared.au.myapp.com",
+    "domain_name": "https://newdomain.com",
+    "number_of_stores": 10,
+    "region": "ap-southeast-2",
+    "deployment_type": "Shared",
+    "subscription_type_id": 10,
+    "subscription_type_name": "General",
+    "package_id": 30,
+    "package_name": "Premium",
+    "cluster_id": "550e8400-e29b-41d4-a716-446655440004",
+    "cluster_name": "Shared Production Cluster",
+    "status": "Active",
+    "created_at": "2025-01-07T05:00:00.000Z",
+    "updated_at": "2026-01-16T10:00:00.000Z",
+    "deployed_at": "2025-01-07T06:00:00.000Z"
+  },
+  "timestamp": "2026-01-16T10:00:00.000Z"
+}
+```
+
+**Landlord Global Table Sync**:
+When subscription fields are updated, the changes are automatically synchronized to the Landlord Global Table:
+- `tenant_url` → Updates `domain` field in landlord table
+- `tenant_api_url` → Updates `api_url` field in landlord table
+- `domain_name` → Updates `url` field in landlord table
+- `number_of_stores` → Updates `outlets` field in landlord table
+
+This ensures consistency between subscription records and the global landlord table used across regions.
+
+**Typical Workflow**:
+1. User clicks "Edit" on subscription in grid
+2. Frontend calls `GET /subscription/:subscriptionId` to fetch current data
+3. User modifies fields in edit form
+4. Frontend calls `PUT /subscription/:subscriptionId` with only changed fields
+5. Backend validates, updates subscription, and syncs to landlord global table
+
+**Validation Rules**:
+- At least one field must be provided for update
+- `package_id` must exist and be active
+- `domain_name` must be valid URL format
+- `number_of_stores` must be at least 1
+- Unknown fields will be rejected (strict validation)
+
+**Error Responses**:
+- `401 Unauthorized` - Missing or invalid JWT token
+- `403 Forbidden` - Insufficient permissions (not admin/manager)
+- `404 NotFound` - Subscription not found
+- `400 ValidationError` - Invalid field values, no fields to update, invalid package_id, or unknown fields
+- `500 InternalError` - Database error
 
 ---
 
