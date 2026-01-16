@@ -349,6 +349,40 @@ export class DynamoDBHelper {
     }
   }
 
+  async listAllStaff(correlationId?: string): Promise<StaffRecord[]> {
+    try {
+      const items = await this.scanTable(this.tables.staff, correlationId);
+      
+      // Validate and filter valid staff records
+      const validStaff: StaffRecord[] = [];
+      for (const item of items) {
+        const validationResult = StaffRecordSchema.safeParse(item);
+        if (validationResult.success) {
+          validStaff.push(validationResult.data);
+        } else {
+          logger.warn('Invalid staff record found during scan', {
+            staffId: item.staff_id,
+            errors: validationResult.error.errors,
+            correlationId
+          });
+        }
+      }
+
+      logger.info('Listed all staff members', {
+        count: validStaff.length,
+        correlationId
+      });
+
+      return validStaff;
+    } catch (error) {
+      logger.error('Failed to list all staff', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        correlationId
+      });
+      throw error;
+    }
+  }
+
   async createStaff(staffData: Omit<StaffRecord, 'staff_id' | 'created_at' | 'updated_at'>, correlationId?: string): Promise<DatabaseOperationResult<StaffRecord>> {
     try {
       const now = new Date().toISOString();

@@ -7,8 +7,9 @@ export interface StaffRecord {
   staff_id: string;           // PK
   email: string;              // GSI PK (EmailIndex)
   password_hash: string;      // bcrypt hash
-  roles: string[];            // ['admin', 'manager', 'staff']
+  roles: string[];            // ['admin', 'manager', 'user']
   enabled: boolean;
+  last_login?: string;        // ISO timestamp of last successful login
   created_at: string;         // ISO timestamp
   updated_at: string;         // ISO timestamp
 }
@@ -152,8 +153,9 @@ export const StaffRecordSchema = z.object({
   staff_id: z.string().uuid(),
   email: z.string().email().toLowerCase(),
   password_hash: z.string().min(1),
-  roles: z.array(z.enum(['admin', 'manager', 'staff'])).min(1),
+  roles: z.array(z.enum(['admin', 'manager', 'user'])).min(1),
   enabled: z.boolean(),
+  last_login: z.string().datetime().optional(),
   created_at: z.string().datetime(),
   updated_at: z.string().datetime(),
 });
@@ -274,7 +276,7 @@ export const ClusterRecordSchema = z.object({
 export const JWTPayloadSchema = z.object({
   sub: z.string().uuid(),
   email: z.string().email(),
-  roles: z.array(z.enum(['admin', 'manager', 'staff'])),
+  roles: z.array(z.enum(['admin', 'manager', 'user'])),
   iat: z.number().int().positive(),
   exp: z.number().int().positive(),
   iss: z.string().optional(),
@@ -285,11 +287,11 @@ export const JWTPayloadSchema = z.object({
 export const CreateStaffSchema = z.object({
   email: z.string().email().toLowerCase(),
   password: z.string().min(8).max(128),
-  roles: z.array(z.enum(['admin', 'manager', 'staff'])).min(1),
+  roles: z.array(z.enum(['admin', 'manager', 'user'])).min(1),
 });
 
 export const UpdateStaffSchema = z.object({
-  roles: z.array(z.enum(['admin', 'manager', 'staff'])).min(1).optional(),
+  roles: z.array(z.enum(['admin', 'manager', 'user'])).min(1).optional(),
   enabled: z.boolean().optional(),
 });
 

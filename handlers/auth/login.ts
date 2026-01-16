@@ -101,6 +101,16 @@ export const loginHandler: RouteHandler = async (req, res) => {
       req.correlationId
     );
 
+    // Update last_login timestamp
+    await dynamoDBHelper.updateStaff(
+      staff.staff_id,
+      {
+        last_login: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      req.correlationId
+    );
+
     logger.info('Login successful', {
       correlationId: req.correlationId,
       staffId: staff.staff_id,

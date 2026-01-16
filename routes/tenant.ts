@@ -1,25 +1,25 @@
 // Tenant management routes registration
 import type { InternalRouter } from '../lib/router.js';
-import { authMiddleware, requireAdminOrManager } from '../middleware/auth.js';
+import { authMiddleware, requireRole } from '../middleware/auth.js';
 import { validationMiddleware } from '../middleware/validation.js';
 import { CreateTenantSchema } from '../lib/data-models.js';
 import { registerHandler, availableClustersHandler } from '../handlers/tenant/index.js';
 
 export function registerTenantRoutes(router: InternalRouter): void {
-  // POST /tenant/register - Create new tenant (admin/manager only)
+  // POST /tenant/register - Create new tenant (admin/manager/user can create)
   router.post('/tenant/register',
     authMiddleware(),
-    requireAdminOrManager,
+    requireRole(['admin', 'manager', 'user']),
     validationMiddleware({
       body: CreateTenantSchema
     }),
     registerHandler
   );
 
-  // GET /tenant/available-clusters - Get available clusters by deployment type (admin/manager only)
+  // GET /tenant/available-clusters - Get available clusters by deployment type (admin/manager/user can read)
   router.get('/tenant/available-clusters',
     authMiddleware(),
-    requireAdminOrManager,
+    requireRole(['admin', 'manager', 'user']),
     availableClustersHandler
   );
 }

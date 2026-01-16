@@ -1,32 +1,32 @@
 // Subscription management routes registration
 import type { InternalRouter } from '../lib/router.js';
-import { authMiddleware, requireAdminOrManager } from '../middleware/auth.js';
+import { authMiddleware, requireRole } from '../middleware/auth.js';
 import { validationMiddleware } from '../middleware/validation.js';
 import { CreateSubscriptionSchema } from '../lib/data-models.js';
 import { createSubscriptionHandler, listSubscriptionsHandler, getSubscriptionHandler } from '../handlers/subscription/index.js';
 
 export function registerSubscriptionRoutes(router: InternalRouter): void {
-  // POST /subscription/create - Create new subscription for tenant (admin/manager only)
+  // POST /subscription/create - Create new subscription for tenant (admin/manager/user can create)
   router.post('/subscription/create',
     authMiddleware(),
-    requireAdminOrManager,
+    requireRole(['admin', 'manager', 'user']),
     validationMiddleware({
       body: CreateSubscriptionSchema
     }),
     createSubscriptionHandler
   );
 
-  // GET /subscription/list - List subscriptions for a tenant (admin/manager only)
+  // GET /subscription/list - List subscriptions for a tenant (admin/manager/user can read)
   router.get('/subscription/list',
     authMiddleware(),
-    requireAdminOrManager,
+    requireRole(['admin', 'manager', 'user']),
     listSubscriptionsHandler
   );
 
-  // GET /subscription/:subscriptionId - Get specific subscription details (admin/manager only)
+  // GET /subscription/:subscriptionId - Get specific subscription details (admin/manager/user can read)
   router.get('/subscription/:subscriptionId',
     authMiddleware(),
-    requireAdminOrManager,
+    requireRole(['admin', 'manager', 'user']),
     getSubscriptionHandler
   );
 }

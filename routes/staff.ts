@@ -8,7 +8,8 @@ import {
   registerHandler, 
   enableHandler, 
   disableHandler,
-  meHandler 
+  meHandler,
+  listStaffHandler
 } from '../handlers/staff/index.js';
 
 // Validation schemas for staff management endpoints
@@ -55,5 +56,12 @@ export function registerStaffRoutes(router: InternalRouter): void {
   router.get('/staff/me',
     authMiddleware(),
     meHandler
+  );
+
+  // GET /staff/list - List all staff members (admin only)
+  router.get('/staff/list',
+    authMiddleware(),
+    requireAdmin,
+    listStaffHandler
   );
 }

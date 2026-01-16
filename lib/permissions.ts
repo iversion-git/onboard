@@ -4,9 +4,9 @@ import { logger } from './logging.js';
 
 // Role hierarchy levels
 export const ROLE_HIERARCHY = {
-  staff: 1,
-  manager: 2,
-  admin: 3,
+  user: 1,      // Read-only access to tenants/subscriptions + create new ones
+  manager: 2,   // Full access to tenants and subscriptions
+  admin: 3,     // Full access to everything
 } as const;
 
 export type Role = keyof typeof ROLE_HIERARCHY;
