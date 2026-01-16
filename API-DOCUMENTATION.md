@@ -7,7 +7,7 @@ https://85n0x7rpf3.execute-api.ap-southeast-2.amazonaws.com/v1
 
 ## API Endpoints Summary
 
-**Total Endpoints: 24**
+**Total Endpoints: 28**
 
 ### Authentication Endpoints (3)
 - `POST /auth/login` - Staff login with JWT token generation
@@ -34,18 +34,20 @@ https://85n0x7rpf3.execute-api.ap-southeast-2.amazonaws.com/v1
 - `GET /subscription/:subscriptionId` - Get specific subscription details (Admin/Manager/User)
 
 ### Cluster Management Endpoints (6)
-- `GET /clusters` - List all clusters (Admin only)
+- `GET /clusters` - List all clusters with filtering and search (Admin only)
 - `POST /cluster/register` - Create new cluster record (Admin only)
 - `POST /cluster/:id/deploy` - Deploy cluster infrastructure (Admin only)
 - `POST /cluster/:id/update` - Update existing cluster infrastructure (Admin only)
 - `GET /cluster/:id/status` - Get cluster deployment status (Admin only)
 - `DELETE /cluster/:id` - Delete In-Active cluster from database (Admin only)
 
-### Package Management Endpoints (1)
+### Package Management Endpoints (2)
 - `GET /packages` - List all active packages for dropdown selection (Admin/Manager)
+- `POST /packages/create` - Create new package (Admin only)
 
-### Subscription Type Management Endpoints (1)
+### Subscription Type Management Endpoints (2)
 - `GET /subscription-types` - List all active subscription types for dropdown selection (Admin/Manager)
+- `POST /subscription-types/create` - Create new subscription type (Admin only)
 
 ## Authentication
 Most endpoints require JWT authentication. Include the token in the Authorization header:
@@ -785,6 +787,21 @@ PUT /tenant/550e8400-e29b-41d4-a716-446655440003
 - Manager attempting to update status will receive `403 Forbidden`
 - Status values: `Pending`, `Active`, `Suspended`, `Terminated`
 
+**Status Transition Rules**:
+- ✅ Pending → Active (tenant is ready for use)
+- ✅ Active → Suspended (temporarily disable tenant)
+- ✅ Active → Terminated (permanently disable tenant)
+- ❌ Active → Pending (cannot revert to pending once active)
+- ✅ Suspended → Active (reactivate tenant)
+- ✅ Suspended → Terminated (permanently disable)
+
+**Status Cascading to Subscriptions**:
+- When tenant status is changed to **Suspended**, all associated subscriptions are automatically set to **Suspended**
+- When tenant status is changed to **Terminated**, all associated subscriptions are automatically set to **Terminated**
+- This ensures consistency across tenant and subscription statuses
+- Cascade happens automatically after tenant update succeeds
+- If cascade fails, tenant update still succeeds (logged as error)
+
 **Typical Workflow**:
 1. User clicks "Edit" on tenant in grid
 2. Frontend calls `GET /tenant/:tenantId` to fetch current data
@@ -895,6 +912,48 @@ PUT /tenant/550e8400-e29b-41d4-a716-446655440003
 
 ---
 
+### POST /packages/create
+**Description**: Create a new package (Admin only)
+
+**Authentication**: ✅ Required (Admin only)
+
+**Request Body**:
+```json
+{
+  "package_name": "Enterprise Plus",           // ✅ Required - Package name (1-100 characters)
+  "description": "Premium package features"    // ❌ Optional - Description (max 500 characters)
+}
+```
+
+**Success Response (201)**:
+```json
+{
+  "success": true,
+  "data": {
+    "package_id": 50,
+    "package_name": "Enterprise Plus",
+    "description": "Premium package features",
+    "active": true,
+    "created_at": "2026-01-16T09:00:00.000Z",
+    "updated_at": "2026-01-16T09:00:00.000Z"
+  },
+  "timestamp": "2026-01-16T09:00:00.000Z"
+}
+```
+
+**Features**:
+- Auto-generates `package_id` (increments by 10 from highest existing ID)
+- Automatically sets `active: true`
+- Only requires package name
+- Description is optional
+
+**Error Responses**:
+- `401 Unauthorized` - Missing or invalid JWT token
+- `403 Forbidden` - Insufficient permissions (not admin)
+- `400 ValidationError` - Invalid package data
+
+---
+
 ### GET /subscription-types
 **Description**: Get all active subscription types for dropdown selection
 
@@ -949,6 +1008,45 @@ PUT /tenant/550e8400-e29b-41d4-a716-446655440003
 **Error Responses**:
 - `401 Unauthorized` - Missing or invalid JWT token
 - `403 Forbidden` - Insufficient permissions (not admin or manager)
+
+---
+
+### POST /subscription-types/create
+**Description**: Create a new subscription type (Admin only)
+
+**Authentication**: ✅ Required (Admin only)
+
+**Request Body**:
+```json
+{
+  "subscription_type_name": "Healthcare"    // ✅ Required - Subscription type name (1-100 characters)
+}
+```
+
+**Success Response (201)**:
+```json
+{
+  "success": true,
+  "data": {
+    "subscription_type_id": 60,
+    "subscription_type_name": "Healthcare",
+    "active": true,
+    "created_at": "2026-01-16T09:15:00.000Z",
+    "updated_at": "2026-01-16T09:15:00.000Z"
+  },
+  "timestamp": "2026-01-16T09:15:00.000Z"
+}
+```
+
+**Features**:
+- Auto-generates `subscription_type_id` (increments by 10 from highest existing ID)
+- Automatically sets `active: true`
+- Only requires subscription type name
+
+**Error Responses**:
+- `401 Unauthorized` - Missing or invalid JWT token
+- `403 Forbidden` - Insufficient permissions (not admin)
+- `400 ValidationError` - Invalid subscription type data
 
 ---
 
@@ -1135,10 +1233,11 @@ PUT /tenant/550e8400-e29b-41d4-a716-446655440003
 - **ID 40**: Enterprise
 
 **Business Rules**:
+- **Tenant must be Active**: Only tenants with status "Active" can have subscriptions created
+- Tenants with status Pending, Suspended, or Terminated cannot create subscriptions
 - Only one Production subscription allowed per tenant
 - Multiple Dev subscriptions allowed per tenant
 - Dev subscriptions get random 2-digit suffix for uniqueness
-- Tenant must exist and be in Active or Pending status
 - Cluster must exist and be Active
 - Subscription type and package must be active
 
@@ -1424,7 +1523,8 @@ GET /subscription/550e8400-e29b-41d4-a716-446655440005
 - `Deploying`: Currently being deployed via CloudFormation
 - `Active`: Successfully deployed and operational
 - `Failed`: Deployment failed
-- `Terminated`: Subscription has been terminated/deleted
+- `Suspended`: Temporarily disabled (cascaded from tenant status)
+- `Terminated`: Permanently disabled (cascaded from tenant status or manually set)
 
 **Error Responses**:
 - `401 Unauthorized` - Missing or invalid JWT token
@@ -1436,11 +1536,27 @@ GET /subscription/550e8400-e29b-41d4-a716-446655440005
 ## Cluster Management Endpoints
 
 ### GET /clusters
-**Description**: Get all clusters (admin only)
+**Description**: List all clusters with optional filtering and search (Admin only)
 
 **Authentication**: ✅ Required (Admin only)
 
-**Request Body**: None
+**Query Parameters** (all optional):
+- `type` - Filter by "shared" or "dedicated"
+- `environment` - Filter by "Production", "Staging", or "Dev"
+- `region` - Filter by AWS region (e.g., "ap-southeast-2", "us-east-1")
+- `status` - Filter by status ("In-Active", "Deploying", "Active", "Failed")
+- `search` - Search across name, type, region, CIDR, status, environment
+
+**Example Requests**:
+```
+GET /clusters
+GET /clusters?type=shared
+GET /clusters?environment=Production
+GET /clusters?region=ap-southeast-2
+GET /clusters?status=Active
+GET /clusters?search=prod
+GET /clusters?type=shared&environment=Production&status=Active
+```
 
 **Success Response (200)**:
 ```json
@@ -1460,11 +1576,26 @@ GET /subscription/550e8400-e29b-41d4-a716-446655440005
         "created_at": "2025-12-26T05:00:00.000Z",
         "deployed_at": "2025-12-26T05:15:00.000Z"
       }
-    ]
+    ],
+    "count": 1,
+    "filters": {
+      "type": null,
+      "environment": null,
+      "region": null,
+      "status": null,
+      "search": null
+    }
   },
-  "timestamp": "2025-12-26T05:00:00.000Z"
+  "timestamp": "2026-01-16T09:30:00.000Z"
 }
 ```
+
+**Filtering Options**:
+- **Type Filter**: "shared" or "dedicated" (case-insensitive)
+- **Environment Filter**: "Production", "Staging", or "Dev" (case-insensitive)
+- **Region Filter**: AWS region code (case-insensitive)
+- **Status Filter**: "In-Active", "Deploying", "Active", "Failed" (case-insensitive)
+- **Search**: Searches across name, type, region, CIDR, status, environment fields
 
 **Error Responses**:
 - `401 Unauthorized` - Missing or invalid JWT token

@@ -67,6 +67,18 @@ export const updateTenantHandler: RouteHandler = async (req, res) => {
       return;
     }
 
+    // Check if trying to change status back to Pending from Active
+    if (updates.status === 'Pending' && existingTenant.tenant.status === 'Active') {
+      logger.warn('Cannot change tenant status from Active back to Pending', {
+        correlationId: req.correlationId,
+        tenantId,
+        currentStatus: existingTenant.tenant.status,
+        requestedStatus: updates.status,
+      });
+      sendError(res, 'ValidationError', 'Cannot change tenant status from Active back to Pending', req.correlationId);
+      return;
+    }
+
     // Check if user is admin when trying to update status
     if (updates.status && req.context.roles && !req.context.roles.includes('admin')) {
       logger.warn('Non-admin attempted to update tenant status', {

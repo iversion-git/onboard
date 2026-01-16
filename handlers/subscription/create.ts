@@ -63,6 +63,22 @@ export const createSubscriptionHandler: RouteHandler = async (req, res) => {
 
     const tenant = tenantResult.tenant;
 
+    // Check if tenant status allows subscription creation
+    if (tenant.status !== 'Active') {
+      logger.warn('Cannot create subscription for non-active tenant', {
+        correlationId: req.correlationId,
+        tenant_id,
+        tenantStatus: tenant.status,
+      });
+      sendError(
+        res,
+        'ValidationError',
+        `Cannot create subscription for tenant with status: ${tenant.status}. Tenant must be Active.`,
+        req.correlationId
+      );
+      return;
+    }
+
     // Resolve subscription type (either from ID or name)
     let finalSubscriptionTypeId = subscription_type_id;
     let subscriptionTypeRecord;
