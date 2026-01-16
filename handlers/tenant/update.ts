@@ -86,6 +86,45 @@ export const updateTenantHandler: RouteHandler = async (req, res) => {
       throw new Error('Failed to update tenant');
     }
 
+    // If status was changed to Suspended or Terminated, cascade to all subscriptions
+    if (updates.status && (updates.status === 'Suspended' || updates.status === 'Terminated')) {
+      logger.info('Cascading tenant status change to subscriptions', {
+        correlationId: req.correlationId,
+        tenantId,
+        tenantStatus: updates.status,
+      });
+
+      try {
+        // Get all subscriptions for this tenant
+        const subscriptions = await dynamoDBHelper.getSubscriptionsByTenant(tenantId, req.correlationId);
+
+        // Update each subscription's status to match tenant status
+        const updatePromises = subscriptions.map(subscription => 
+          dynamoDBHelper.updateSubscription(
+            subscription.subscription_id,
+            { status: updates.status as 'Suspended' | 'Terminated' },
+            req.correlationId
+          )
+        );
+
+        await Promise.all(updatePromises);
+
+        logger.info('Successfully cascaded status to subscriptions', {
+          correlationId: req.correlationId,
+          tenantId,
+          subscriptionCount: subscriptions.length,
+          newStatus: updates.status,
+        });
+      } catch (cascadeError) {
+        logger.error('Failed to cascade status to subscriptions', {
+          correlationId: req.correlationId,
+          tenantId,
+          error: cascadeError instanceof Error ? cascadeError.message : 'Unknown error',
+        });
+        // Don't fail the tenant update if cascade fails, just log it
+      }
+    }
+
     logger.info('Tenant updated successfully', {
       correlationId: req.correlationId,
       tenantId,

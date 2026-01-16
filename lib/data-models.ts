@@ -100,7 +100,7 @@ export interface SubscriptionRecord {
   package_id: number;             // FK to packages table
   cluster_id: string;             // Cluster ID from tenant
   cluster_name: string;           // Cluster name from tenant
-  status: 'Pending' | 'Deploying' | 'Active' | 'Failed' | 'Terminated';
+  status: 'Pending' | 'Deploying' | 'Active' | 'Failed' | 'Suspended' | 'Terminated';
   deployment_id?: string;         // CloudFormation stack ARN
   deployment_status?: string;     // CloudFormation stack status
   stack_outputs?: Record<string, any>; // CloudFormation outputs
@@ -244,7 +244,7 @@ export const SubscriptionRecordSchema = z.object({
   cluster_name: z.string().min(1).max(255), // Display name for cluster
   cluster_region: z.string().min(1).max(50), // Cluster AWS region
   db_proxy_url: z.string().optional(), // DB proxy URL from cluster stack outputs
-  status: z.enum(['Pending', 'Deploying', 'Active', 'Failed', 'Terminated']),
+  status: z.enum(['Pending', 'Deploying', 'Active', 'Failed', 'Suspended', 'Terminated']),
   deployment_id: z.string().optional(),
   deployment_status: z.string().optional(),
   stack_outputs: z.record(z.any()).optional(),
