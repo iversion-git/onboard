@@ -837,8 +837,8 @@ Resources:
       SecurityGroupIngress:
         # Allow Redis TLS access from Lambda Security Group (App subnets)
         - IpProtocol: tcp
-          FromPort: 6380
-          ToPort: 6380
+          FromPort: 6379
+          ToPort: 6379
           SourceSecurityGroupId: !Ref LambdaSecurityGroup
           Description: Allow Redis TLS from Lambda Security Group (App subnets)
       Tags:
@@ -898,8 +898,8 @@ Resources:
     Properties:
       GroupId: !Ref LambdaSecurityGroup
       IpProtocol: tcp
-      FromPort: 6380
-      ToPort: 6380
+      FromPort: 6379
+      ToPort: 6379
       DestinationSecurityGroupId: !Ref RedisSecurityGroup
       Description: Allow Redis TLS to Redis Security Group
 
